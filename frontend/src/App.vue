@@ -52,6 +52,7 @@ onMounted(async () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  border-radius: 10px;
 }
 
 .terminal-view {

@@ -131,7 +131,7 @@ const handleKeydown = (e: KeyboardEvent) => {
     </div>
 
     <!-- Draggable spacer -->
-    <div class="drag-spacer"></div>
+    <div class="drag-spacer" data-tauri-drag-region></div>
 
     <button class="new-tab-btn" @click="handleNewTab" title="New tab">
       +
@@ -168,31 +168,19 @@ const handleKeydown = (e: KeyboardEvent) => {
   padding: 0 12px 0 8px;
   user-select: none;
   gap: 12px;
-  /* Default: draggable on macOS, no-drag on Windows/Linux */
-  -webkit-app-region: drag;
+  border-radius: 10px 10px 0 0;
 }
 
 .window-controls {
   display: flex;
   -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* macOS style controls */
 .window-controls.macos {
   gap: 8px;
   padding: 0 4px;
-}
-
-.drag-area-left {
-  width: 20px;
-  height: 40px;
-  -webkit-app-region: drag;
-  cursor: grab;
-  flex-shrink: 0;
-}
-
-.drag-area-left:active {
-  cursor: grabbing;
 }
 
 .control-btn {
@@ -290,21 +278,49 @@ const handleKeydown = (e: KeyboardEvent) => {
   gap: 4px;
   overflow-x: auto;
   overflow-y: hidden;
-  -webkit-app-region: no-drag;
   flex-shrink: 1;
   min-width: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .drag-spacer {
   flex: 1;
-  min-width: 40px;
+  min-width: 60px;
   height: 40px;
-  -webkit-app-region: drag;
   cursor: grab;
+  position: relative;
+  /* Combine both methods for compatibility */
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
 .drag-spacer:active {
   cursor: grabbing;
+}
+
+/* Visual hint for drag area */
+.drag-spacer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 4px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 20%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 80%,
+    transparent 100%);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.drag-spacer:hover::after {
+  opacity: 1;
 }
 
 .tab-list::-webkit-scrollbar {
@@ -324,7 +340,6 @@ const handleKeydown = (e: KeyboardEvent) => {
   min-width: 120px;
   max-width: 200px;
   position: relative;
-  -webkit-app-region: no-drag;
 }
 
 .tab:hover {
@@ -412,6 +427,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   font-size: 20px;
   transition: all 0.15s;
   -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .new-tab-btn:hover {
