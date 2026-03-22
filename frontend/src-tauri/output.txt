@@ -1,0 +1,448 @@
+   Compiling terminal-emulator v0.1.0 (/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri)
+error: proc macro panicked
+  --> src/lib.rs:23:14
+   |
+23 |         .run(tauri::generate_context!())
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: message: failed to open icon /Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri/icons/32x32.png: No such file or directory (os error 2)
+
+error[E0277]: `(dyn PtySystem + 'static)` cannot be sent between threads safely
+  --> src/pty/commands.rs:8:14
+   |
+ 8 |     manager: State<'_, Arc<Mutex<PtyManager>>>,
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `(dyn PtySystem + 'static)` cannot be sent between threads safely
+   |
+   = help: the trait `Send` is not implemented for `(dyn PtySystem + 'static)`
+   = note: required for `Unique<(dyn PtySystem + 'static)>` to implement `Send`
+note: required because it appears within the type `Box<(dyn PtySystem + 'static)>`
+  --> library/alloc/src/boxed.rs:234:11
+note: required because it appears within the type `PtyManager`
+  --> src/pty/manager.rs:17:12
+   |
+17 | pub struct PtyManager {
+   |            ^^^^^^^^^^
+   = note: required for `tauri::async_runtime::Mutex<PtyManager>` to implement `Sync`
+   = note: 1 redundant requirement hidden
+   = note: required for `Arc<tauri::async_runtime::Mutex<PtyManager>>` to implement `Send`
+note: required by a bound in `State`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:21:25
+   |
+21 | pub struct State<'r, T: Send + Sync + 'static>(&'r T);
+   |                         ^^^^ required by this bound in `State`
+
+error[E0277]: `(dyn PtySystem + 'static)` cannot be sent between threads safely
+  --> src/pty/commands.rs:18:14
+   |
+18 |     manager: State<'_, Arc<Mutex<PtyManager>>>,
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `(dyn PtySystem + 'static)` cannot be sent between threads safely
+   |
+   = help: the trait `Send` is not implemented for `(dyn PtySystem + 'static)`
+   = note: required for `Unique<(dyn PtySystem + 'static)>` to implement `Send`
+note: required because it appears within the type `Box<(dyn PtySystem + 'static)>`
+  --> library/alloc/src/boxed.rs:234:11
+note: required because it appears within the type `PtyManager`
+  --> src/pty/manager.rs:17:12
+   |
+17 | pub struct PtyManager {
+   |            ^^^^^^^^^^
+   = note: required for `tauri::async_runtime::Mutex<PtyManager>` to implement `Sync`
+   = note: 1 redundant requirement hidden
+   = note: required for `Arc<tauri::async_runtime::Mutex<PtyManager>>` to implement `Send`
+note: required by a bound in `State`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:21:25
+   |
+21 | pub struct State<'r, T: Send + Sync + 'static>(&'r T);
+   |                         ^^^^ required by this bound in `State`
+
+error[E0277]: `(dyn PtySystem + 'static)` cannot be sent between threads safely
+  --> src/pty/commands.rs:27:14
+   |
+27 |     manager: State<'_, Arc<Mutex<PtyManager>>>,
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `(dyn PtySystem + 'static)` cannot be sent between threads safely
+   |
+   = help: the trait `Send` is not implemented for `(dyn PtySystem + 'static)`
+   = note: required for `Unique<(dyn PtySystem + 'static)>` to implement `Send`
+note: required because it appears within the type `Box<(dyn PtySystem + 'static)>`
+  --> library/alloc/src/boxed.rs:234:11
+note: required because it appears within the type `PtyManager`
+  --> src/pty/manager.rs:17:12
+   |
+17 | pub struct PtyManager {
+   |            ^^^^^^^^^^
+   = note: required for `tauri::async_runtime::Mutex<PtyManager>` to implement `Sync`
+   = note: 1 redundant requirement hidden
+   = note: required for `Arc<tauri::async_runtime::Mutex<PtyManager>>` to implement `Send`
+note: required by a bound in `State`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:21:25
+   |
+21 | pub struct State<'r, T: Send + Sync + 'static>(&'r T);
+   |                         ^^^^ required by this bound in `State`
+
+error[E0277]: `(dyn PtySystem + 'static)` cannot be sent between threads safely
+  --> src/pty/commands.rs:37:14
+   |
+37 |     manager: State<'_, Arc<Mutex<PtyManager>>>,
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `(dyn PtySystem + 'static)` cannot be sent between threads safely
+   |
+   = help: the trait `Send` is not implemented for `(dyn PtySystem + 'static)`
+   = note: required for `Unique<(dyn PtySystem + 'static)>` to implement `Send`
+note: required because it appears within the type `Box<(dyn PtySystem + 'static)>`
+  --> library/alloc/src/boxed.rs:234:11
+note: required because it appears within the type `PtyManager`
+  --> src/pty/manager.rs:17:12
+   |
+17 | pub struct PtyManager {
+   |            ^^^^^^^^^^
+   = note: required for `tauri::async_runtime::Mutex<PtyManager>` to implement `Sync`
+   = note: 1 redundant requirement hidden
+   = note: required for `Arc<tauri::async_runtime::Mutex<PtyManager>>` to implement `Send`
+note: required by a bound in `State`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:21:25
+   |
+21 | pub struct State<'r, T: Send + Sync + 'static>(&'r T);
+   |                         ^^^^ required by this bound in `State`
+
+warning: variable does not need to be mutable
+  --> src/pty/manager.rs:85:17
+   |
+85 |             let mut master_guard = master.blocking_lock();
+   |                 ----^^^^^^^^^^^^
+   |                 |
+   |                 help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+error[E0599]: no method named `lock` found for struct `State<'r, T>` in the current scope
+  --> src/pty/commands.rs:13:13
+   |
+13 |     manager.lock().await.spawn_shell(cols, rows, app_handle).await
+   |             ^^^^ method not found in `State<'_, Arc<Mutex<PtyManager>>>`
+   |
+   = note: the full name for the type has been written to '/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri/target/debug/deps/terminal_emulator_lib-2ab87471d9ea8e5d.long-type-3557279548951450973.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+
+error[E0282]: type annotations needed
+  --> src/pty/commands.rs:13:5
+   |
+13 |     manager.lock().await.spawn_shell(cols, rows, app_handle).await
+   |     ^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0599]: no method named `lock` found for struct `State<'r, T>` in the current scope
+  --> src/pty/commands.rs:22:13
+   |
+22 |     manager.lock().await.write(&session_id, &data)
+   |             ^^^^ method not found in `State<'_, Arc<Mutex<PtyManager>>>`
+   |
+   = note: the full name for the type has been written to '/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri/target/debug/deps/terminal_emulator_lib-2ab87471d9ea8e5d.long-type-3557279548951450973.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+
+error[E0282]: type annotations needed
+  --> src/pty/commands.rs:22:5
+   |
+22 |     manager.lock().await.write(&session_id, &data)
+   |     ^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0599]: no method named `lock` found for struct `State<'r, T>` in the current scope
+  --> src/pty/commands.rs:32:13
+   |
+32 |     manager.lock().await.resize(&session_id, cols, rows).await
+   |             ^^^^ method not found in `State<'_, Arc<Mutex<PtyManager>>>`
+   |
+   = note: the full name for the type has been written to '/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri/target/debug/deps/terminal_emulator_lib-2ab87471d9ea8e5d.long-type-3557279548951450973.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+
+error[E0282]: type annotations needed
+  --> src/pty/commands.rs:32:5
+   |
+32 |     manager.lock().await.resize(&session_id, cols, rows).await
+   |     ^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0599]: no method named `lock` found for struct `State<'r, T>` in the current scope
+  --> src/pty/commands.rs:40:13
+   |
+40 |     manager.lock().await.close(&session_id)
+   |             ^^^^ method not found in `State<'_, Arc<Mutex<PtyManager>>>`
+   |
+   = note: the full name for the type has been written to '/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri/target/debug/deps/terminal_emulator_lib-2ab87471d9ea8e5d.long-type-3557279548951450973.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+
+error[E0282]: type annotations needed
+  --> src/pty/commands.rs:40:5
+   |
+40 |     manager.lock().await.close(&session_id)
+   |     ^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0599]: no method named `manage` found for mutable reference `&mut tauri::App` in the current scope
+    --> src/lib.rs:14:17
+     |
+  14 |             app.manage(pty_manager);
+     |                 ^^^^^^
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: there is a method `manager` with a similar name, but with different arguments
+    --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/lib.rs:1066:5
+     |
+1066 |     fn manager(&self) -> &AppManager<R>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `Manager` which provides `manage` is implemented but not in scope; perhaps you want to import it
+     |
+   1 + use tauri::Manager;
+     |
+
+error[E0277]: `(dyn PtySystem + 'static)` cannot be sent between threads safely
+  --> src/pty/commands.rs:6:1
+   |
+ 6 |   #[command]
+   |   ^^^^^^^^^^ `(dyn PtySystem + 'static)` cannot be sent between threads safely
+   |
+  ::: src/lib.rs:17:25
+   |
+17 |           .invoke_handler(tauri::generate_handler![
+   |  _________________________-
+18 | |             pty::commands::pty_spawn,
+19 | |             pty::commands::pty_write,
+20 | |             pty::commands::pty_resize,
+21 | |             pty::commands::pty_close,
+22 | |         ])
+   | |_________- in this macro invocation
+   |
+   = help: the trait `Send` is not implemented for `(dyn PtySystem + 'static)`
+   = note: required for `Unique<(dyn PtySystem + 'static)>` to implement `Send`
+note: required because it appears within the type `Box<(dyn PtySystem + 'static)>`
+  --> library/alloc/src/boxed.rs:234:11
+note: required because it appears within the type `PtyManager`
+  --> src/pty/manager.rs:17:12
+   |
+17 | pub struct PtyManager {
+   |            ^^^^^^^^^^
+   = note: required for `tauri::async_runtime::Mutex<PtyManager>` to implement `Sync`
+   = note: 1 redundant requirement hidden
+   = note: required for `Arc<tauri::async_runtime::Mutex<PtyManager>>` to implement `Send`
+note: required by a bound in `State`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:21:25
+   |
+21 | pub struct State<'r, T: Send + Sync + 'static>(&'r T);
+   |                         ^^^^ required by this bound in `State`
+   = note: this error originates in the macro `pty::commands::__cmd__pty_spawn` which comes from the expansion of the macro `tauri::generate_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `State<'_, Arc<...>>: CommandArg<'_, ...>` is not satisfied
+  --> src/pty/commands.rs:6:1
+   |
+ 6 |   #[command]
+   |   ^^^^^^^^^^ unsatisfied trait bound
+   |
+  ::: src/lib.rs:17:25
+   |
+17 |           .invoke_handler(tauri::generate_handler![
+   |  _________________________-
+18 | |             pty::commands::pty_spawn,
+19 | |             pty::commands::pty_write,
+20 | |             pty::commands::pty_resize,
+21 | |             pty::commands::pty_close,
+22 | |         ])
+   | |_________- in this macro invocation
+   |
+   = help: the trait `CommandArg<'_, tauri_runtime_wry::Wry<EventLoopMessage>>` is not implemented for `State<'_, Arc<Mutex<PtyManager>>>`
+help: the trait `CommandArg<'_, R>` is implemented for `State<'_, T>`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:60:1
+   |
+60 | impl<'r, 'de: 'r, T: Send + Sync + 'static, R: Runtime> CommandArg<'de, R> for State<'r, T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: the full name for the type has been written to '/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri/target/debug/deps/terminal_emulator_lib-2ab87471d9ea8e5d.long-type-1579323369623111446.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+   = note: this error originates in the macro `pty::commands::__cmd__pty_spawn` which comes from the expansion of the macro `tauri::generate_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `(dyn PtySystem + 'static)` cannot be sent between threads safely
+  --> src/pty/commands.rs:16:1
+   |
+16 |   #[command]
+   |   ^^^^^^^^^^ `(dyn PtySystem + 'static)` cannot be sent between threads safely
+   |
+  ::: src/lib.rs:17:25
+   |
+17 |           .invoke_handler(tauri::generate_handler![
+   |  _________________________-
+18 | |             pty::commands::pty_spawn,
+19 | |             pty::commands::pty_write,
+20 | |             pty::commands::pty_resize,
+21 | |             pty::commands::pty_close,
+22 | |         ])
+   | |_________- in this macro invocation
+   |
+   = help: the trait `Send` is not implemented for `(dyn PtySystem + 'static)`
+   = note: required for `Unique<(dyn PtySystem + 'static)>` to implement `Send`
+note: required because it appears within the type `Box<(dyn PtySystem + 'static)>`
+  --> library/alloc/src/boxed.rs:234:11
+note: required because it appears within the type `PtyManager`
+  --> src/pty/manager.rs:17:12
+   |
+17 | pub struct PtyManager {
+   |            ^^^^^^^^^^
+   = note: required for `tauri::async_runtime::Mutex<PtyManager>` to implement `Sync`
+   = note: 1 redundant requirement hidden
+   = note: required for `Arc<tauri::async_runtime::Mutex<PtyManager>>` to implement `Send`
+note: required by a bound in `State`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:21:25
+   |
+21 | pub struct State<'r, T: Send + Sync + 'static>(&'r T);
+   |                         ^^^^ required by this bound in `State`
+   = note: this error originates in the macro `pty::commands::__cmd__pty_write` which comes from the expansion of the macro `tauri::generate_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `State<'_, Arc<...>>: CommandArg<'_, ...>` is not satisfied
+  --> src/pty/commands.rs:16:1
+   |
+16 |   #[command]
+   |   ^^^^^^^^^^ unsatisfied trait bound
+   |
+  ::: src/lib.rs:17:25
+   |
+17 |           .invoke_handler(tauri::generate_handler![
+   |  _________________________-
+18 | |             pty::commands::pty_spawn,
+19 | |             pty::commands::pty_write,
+20 | |             pty::commands::pty_resize,
+21 | |             pty::commands::pty_close,
+22 | |         ])
+   | |_________- in this macro invocation
+   |
+   = help: the trait `CommandArg<'_, tauri_runtime_wry::Wry<EventLoopMessage>>` is not implemented for `State<'_, Arc<Mutex<PtyManager>>>`
+help: the trait `CommandArg<'_, R>` is implemented for `State<'_, T>`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:60:1
+   |
+60 | impl<'r, 'de: 'r, T: Send + Sync + 'static, R: Runtime> CommandArg<'de, R> for State<'r, T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: the full name for the type has been written to '/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri/target/debug/deps/terminal_emulator_lib-2ab87471d9ea8e5d.long-type-13421421590940347494.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+   = note: this error originates in the macro `pty::commands::__cmd__pty_write` which comes from the expansion of the macro `tauri::generate_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `(dyn PtySystem + 'static)` cannot be sent between threads safely
+  --> src/pty/commands.rs:25:1
+   |
+25 |   #[command]
+   |   ^^^^^^^^^^ `(dyn PtySystem + 'static)` cannot be sent between threads safely
+   |
+  ::: src/lib.rs:17:25
+   |
+17 |           .invoke_handler(tauri::generate_handler![
+   |  _________________________-
+18 | |             pty::commands::pty_spawn,
+19 | |             pty::commands::pty_write,
+20 | |             pty::commands::pty_resize,
+21 | |             pty::commands::pty_close,
+22 | |         ])
+   | |_________- in this macro invocation
+   |
+   = help: the trait `Send` is not implemented for `(dyn PtySystem + 'static)`
+   = note: required for `Unique<(dyn PtySystem + 'static)>` to implement `Send`
+note: required because it appears within the type `Box<(dyn PtySystem + 'static)>`
+  --> library/alloc/src/boxed.rs:234:11
+note: required because it appears within the type `PtyManager`
+  --> src/pty/manager.rs:17:12
+   |
+17 | pub struct PtyManager {
+   |            ^^^^^^^^^^
+   = note: required for `tauri::async_runtime::Mutex<PtyManager>` to implement `Sync`
+   = note: 1 redundant requirement hidden
+   = note: required for `Arc<tauri::async_runtime::Mutex<PtyManager>>` to implement `Send`
+note: required by a bound in `State`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:21:25
+   |
+21 | pub struct State<'r, T: Send + Sync + 'static>(&'r T);
+   |                         ^^^^ required by this bound in `State`
+   = note: this error originates in the macro `pty::commands::__cmd__pty_resize` which comes from the expansion of the macro `tauri::generate_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `State<'_, Arc<...>>: CommandArg<'_, ...>` is not satisfied
+  --> src/pty/commands.rs:25:1
+   |
+25 |   #[command]
+   |   ^^^^^^^^^^ unsatisfied trait bound
+   |
+  ::: src/lib.rs:17:25
+   |
+17 |           .invoke_handler(tauri::generate_handler![
+   |  _________________________-
+18 | |             pty::commands::pty_spawn,
+19 | |             pty::commands::pty_write,
+20 | |             pty::commands::pty_resize,
+21 | |             pty::commands::pty_close,
+22 | |         ])
+   | |_________- in this macro invocation
+   |
+   = help: the trait `CommandArg<'_, tauri_runtime_wry::Wry<EventLoopMessage>>` is not implemented for `State<'_, Arc<Mutex<PtyManager>>>`
+help: the trait `CommandArg<'_, R>` is implemented for `State<'_, T>`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:60:1
+   |
+60 | impl<'r, 'de: 'r, T: Send + Sync + 'static, R: Runtime> CommandArg<'de, R> for State<'r, T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: the full name for the type has been written to '/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri/target/debug/deps/terminal_emulator_lib-2ab87471d9ea8e5d.long-type-578007261118404357.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+   = note: this error originates in the macro `pty::commands::__cmd__pty_resize` which comes from the expansion of the macro `tauri::generate_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `(dyn PtySystem + 'static)` cannot be sent between threads safely
+  --> src/pty/commands.rs:35:1
+   |
+35 |   #[command]
+   |   ^^^^^^^^^^ `(dyn PtySystem + 'static)` cannot be sent between threads safely
+   |
+  ::: src/lib.rs:17:25
+   |
+17 |           .invoke_handler(tauri::generate_handler![
+   |  _________________________-
+18 | |             pty::commands::pty_spawn,
+19 | |             pty::commands::pty_write,
+20 | |             pty::commands::pty_resize,
+21 | |             pty::commands::pty_close,
+22 | |         ])
+   | |_________- in this macro invocation
+   |
+   = help: the trait `Send` is not implemented for `(dyn PtySystem + 'static)`
+   = note: required for `Unique<(dyn PtySystem + 'static)>` to implement `Send`
+note: required because it appears within the type `Box<(dyn PtySystem + 'static)>`
+  --> library/alloc/src/boxed.rs:234:11
+note: required because it appears within the type `PtyManager`
+  --> src/pty/manager.rs:17:12
+   |
+17 | pub struct PtyManager {
+   |            ^^^^^^^^^^
+   = note: required for `tauri::async_runtime::Mutex<PtyManager>` to implement `Sync`
+   = note: 1 redundant requirement hidden
+   = note: required for `Arc<tauri::async_runtime::Mutex<PtyManager>>` to implement `Send`
+note: required by a bound in `State`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:21:25
+   |
+21 | pub struct State<'r, T: Send + Sync + 'static>(&'r T);
+   |                         ^^^^ required by this bound in `State`
+   = note: this error originates in the macro `pty::commands::__cmd__pty_close` which comes from the expansion of the macro `tauri::generate_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `State<'_, Arc<...>>: CommandArg<'_, ...>` is not satisfied
+  --> src/pty/commands.rs:35:1
+   |
+35 |   #[command]
+   |   ^^^^^^^^^^ unsatisfied trait bound
+   |
+  ::: src/lib.rs:17:25
+   |
+17 |           .invoke_handler(tauri::generate_handler![
+   |  _________________________-
+18 | |             pty::commands::pty_spawn,
+19 | |             pty::commands::pty_write,
+20 | |             pty::commands::pty_resize,
+21 | |             pty::commands::pty_close,
+22 | |         ])
+   | |_________- in this macro invocation
+   |
+   = help: the trait `CommandArg<'_, tauri_runtime_wry::Wry<EventLoopMessage>>` is not implemented for `State<'_, Arc<Mutex<PtyManager>>>`
+help: the trait `CommandArg<'_, R>` is implemented for `State<'_, T>`
+  --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/state.rs:60:1
+   |
+60 | impl<'r, 'de: 'r, T: Send + Sync + 'static, R: Runtime> CommandArg<'de, R> for State<'r, T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: the full name for the type has been written to '/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri/target/debug/deps/terminal_emulator_lib-2ab87471d9ea8e5d.long-type-14088764034385313429.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+   = note: this error originates in the macro `pty::commands::__cmd__pty_close` which comes from the expansion of the macro `tauri::generate_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+Some errors have detailed explanations: E0277, E0282, E0599.
+For more information about an error, try `rustc --explain E0277`.
+warning: `terminal-emulator` (lib) generated 1 warning
+error: could not compile `terminal-emulator` (lib) due to 22 previous errors; 1 warning emitted

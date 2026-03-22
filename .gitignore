@@ -1,0 +1,32 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.pnpm-debug.log
+.npm/
+
+# Rust / Tauri
+/frontend/src-tauri/target/
+/frontend/src-tauri/gen/
+Cargo.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+.idea/
+
+# Build
+dist/
+/frontend/dist/
+*.swp
+
+# Vite / Vue
+.vite/
+.vite-temp/
+*.local

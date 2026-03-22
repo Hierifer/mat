@@ -1,0 +1,31 @@
+   Compiling terminal-emulator v0.1.0 (/Users/hierifer/Desktop/terminal-emulator/frontend/src-tauri)
+warning: variable does not need to be mutable
+  --> src/pty/manager.rs:85:17
+   |
+85 |             let mut master_guard = master.blocking_lock();
+   |                 ----^^^^^^^^^^^^
+   |                 |
+   |                 help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+error[E0599]: no method named `manage` found for mutable reference `&mut tauri::App` in the current scope
+    --> src/lib.rs:14:17
+     |
+  14 |             app.manage(pty_manager);
+     |                 ^^^^^^
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: there is a method `manager` with a similar name, but with different arguments
+    --> /Users/hierifer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.3/src/lib.rs:1066:5
+     |
+1066 |     fn manager(&self) -> &AppManager<R>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `Manager` which provides `manage` is implemented but not in scope; perhaps you want to import it
+     |
+   1 + use tauri::Manager;
+     |
+
+For more information about this error, try `rustc --explain E0599`.
+warning: `terminal-emulator` (lib) generated 1 warning
+error: could not compile `terminal-emulator` (lib) due to 1 previous error; 1 warning emitted
