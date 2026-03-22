@@ -33,11 +33,16 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './frontend/src-tauri -> target'
+
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.0-dev \
+          sudo apt-get install -y \
             build-essential \
             curl \
             wget \
@@ -45,7 +50,21 @@ jobs:
             libssl-dev \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-0 \
+            gir1.2-javascriptcoregtk-4.1 \
+            libwebkit2gtk-4.1-0
+
+      - name: verify dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          pkg-config --exists javascriptcoregtk-4.1 && echo "✓ javascriptcoregtk-4.1 found" || echo "✗ javascriptcoregtk-4.1 missing"
+          pkg-config --exists libsoup-3.0 && echo "✓ libsoup-3.0 found" || echo "✗ libsoup-3.0 missing"
+          pkg-config --modversion javascriptcoregtk-4.1 || true
+          pkg-config --modversion libsoup-3.0 || true
 
       - name: install frontend dependencies
         # Assuming bun is used locally but pnpm is safer in CI or just npm
@@ -56,6 +75,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: "./frontend"
           tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
           releaseName: 'Terminal Emulator v__VERSION__'
           releaseBody: 'See the assets to download this version and install.'
