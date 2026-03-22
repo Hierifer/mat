@@ -168,6 +168,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   padding: 0 12px 0 8px;
   user-select: none;
   gap: 12px;
+  /* Default: draggable on macOS, no-drag on Windows/Linux */
   -webkit-app-region: drag;
 }
 
@@ -180,6 +181,18 @@ const handleKeydown = (e: KeyboardEvent) => {
 .window-controls.macos {
   gap: 8px;
   padding: 0 4px;
+}
+
+.drag-area-left {
+  width: 20px;
+  height: 40px;
+  -webkit-app-region: drag;
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.drag-area-left:active {
+  cursor: grabbing;
 }
 
 .control-btn {
@@ -284,8 +297,14 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 .drag-spacer {
   flex: 1;
-  min-width: 20px;
+  min-width: 40px;
+  height: 40px;
   -webkit-app-region: drag;
+  cursor: grab;
+}
+
+.drag-spacer:active {
+  cursor: grabbing;
 }
 
 .tab-list::-webkit-scrollbar {
