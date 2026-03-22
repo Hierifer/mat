@@ -27,10 +27,17 @@ onMounted(async () => {
   <div class="app-container">
     <tab-bar v-if="terminalStore.tabs.length > 0" />
 
-    <div v-if="terminalStore.activeTab" class="terminal-view">
-      <split-container :node="terminalStore.activeTab.layout" />
+    <!-- Render all tabs but only show the active one to preserve terminal history -->
+    <div
+      v-for="tab in terminalStore.tabs"
+      :key="tab.id"
+      v-show="tab.id === terminalStore.activeTabId"
+      class="terminal-view"
+    >
+      <split-container :node="tab.layout" />
     </div>
-    <div v-else class="empty-state">
+
+    <div v-if="terminalStore.tabs.length === 0" class="empty-state">
       No terminal sessions
     </div>
   </div>

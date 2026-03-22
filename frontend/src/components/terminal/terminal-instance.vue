@@ -53,6 +53,7 @@ const debouncedResize = (cols: number, rows: number) => {
 }
 
 onMounted(async () => {
+  console.log(`[Terminal] Mounting terminal for session: ${props.sessionId}`)
   if (!terminalRef.value) return
 
   // Initialize xterm.js
@@ -127,6 +128,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  console.log(`[Terminal] Unmounting terminal for session: ${props.sessionId}`)
   isUnmounting = true
 
   if (resizeTimeout) {

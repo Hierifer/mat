@@ -128,6 +128,9 @@ const handleKeydown = (e: KeyboardEvent) => {
       </div>
     </div>
 
+    <!-- Draggable spacer -->
+    <div class="drag-spacer"></div>
+
     <button class="new-tab-btn" @click="handleNewTab" title="New tab">
       +
     </button>
@@ -214,11 +217,18 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 .tab-list {
   display: flex;
-  flex: 1;
   gap: 4px;
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-app-region: no-drag;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.drag-spacer {
+  flex: 1;
+  min-width: 20px;
+  -webkit-app-region: drag;
 }
 
 .tab-list::-webkit-scrollbar {

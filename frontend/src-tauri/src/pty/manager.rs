@@ -135,7 +135,13 @@ impl PtyManager {
     }
 
     pub fn close(&mut self, session_id: &str) -> Result<(), String> {
+        log::info!("Closing PTY session: {} (before: {} sessions)", session_id, self.sessions.len());
         self.sessions.remove(session_id);
+        log::info!("Session closed (remaining: {} sessions)", self.sessions.len());
         Ok(())
+    }
+
+    pub fn list_sessions(&self) -> Vec<String> {
+        self.sessions.keys().cloned().collect()
     }
 }

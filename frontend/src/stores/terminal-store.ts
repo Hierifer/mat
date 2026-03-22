@@ -71,6 +71,7 @@ export const useTerminalStore = defineStore('terminal', {
           const response = await invoke<{ session_id: string; cwd: string }>('pty_spawn', { cols: 80, rows: 24 })
           sessionId = response.session_id
           cwd = response.cwd
+          console.log(`[Store] Created PTY session for new tab: ${sessionId}`)
         } else {
           console.warn('Tauri environment not detected. Using mock session ID.')
         }
@@ -111,10 +112,12 @@ export const useTerminalStore = defineStore('terminal', {
 
     async closeSessionsInLayout(node: SplitNode) {
       if (node.type === 'pane' && node.sessionId) {
+        console.log(`[Store] Closing PTY session: ${node.sessionId}`)
         try {
           // @ts-ignore
           if (window.__TAURI_INTERNALS__) {
             await invoke('pty_close', { sessionId: node.sessionId })
+            console.log(`[Store] Successfully closed session: ${node.sessionId}`)
           }
         } catch (error) {
           console.error('Failed to close PTY session:', error)
@@ -126,8 +129,24 @@ export const useTerminalStore = defineStore('terminal', {
       }
     },
 
-    setActiveTab(tabId: string) {
+    async setActiveTab(tabId: string) {
+      console.log(`[Store] Switching to tab: ${tabId}`)
+      const tab = this.tabs.find(t => t.id === tabId)
+      if (tab) {
+        console.log(`[Store] Tab layout:`, tab.layout)
+      }
       this.activeTabId = tabId
+
+      // Debug: List active sessions in backend
+      try {
+        // @ts-ignore
+        if (window.__TAURI_INTERNALS__) {
+          const sessions = await invoke<string[]>('pty_list_sessions')
+          console.log(`[Store] Active backend sessions:`, sessions)
+        }
+      } catch (error) {
+        console.error('Failed to list sessions:', error)
+      }
     },
 
     updateTabTitle(tabId: string, title: string) {

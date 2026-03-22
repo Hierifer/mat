@@ -56,3 +56,10 @@ pub async fn pty_close(
 ) -> Result<(), String> {
     manager.lock().await.close(&session_id)
 }
+
+#[command]
+pub async fn pty_list_sessions(
+    manager: State<'_, Arc<Mutex<PtyManager>>>,
+) -> Result<Vec<String>, String> {
+    Ok(manager.lock().await.list_sessions())
+}

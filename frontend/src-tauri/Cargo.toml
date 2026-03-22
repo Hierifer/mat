@@ -1,12 +1,12 @@
 [package]
-name = "terminal-emulator"
+name = "mat"
 version = "0.1.0"
 description = "Modern terminal emulator with iTerm2-style features"
-authors = ["you"]
+authors = ["Hierifer"]
 edition = "2021"
 
 [lib]
-name = "terminal_emulator_lib"
+name = "mat_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
