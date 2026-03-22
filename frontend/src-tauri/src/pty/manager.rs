@@ -42,6 +42,11 @@ impl PtyManager {
         // Detect and spawn platform-appropriate shell
         let shell_path = shell::get_default_shell();
         let mut cmd = CommandBuilder::new(&shell_path);
+
+        // Launch as a login shell to load user's profile and PATH
+        #[cfg(not(target_os = "windows"))]
+        cmd.arg("-l");
+
         cmd.env("TERM", "xterm-256color");
 
         pty_pair.slave
