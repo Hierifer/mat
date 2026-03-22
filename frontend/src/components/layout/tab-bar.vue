@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
+import { usePlatform } from '@/composables/use-platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 
 const store = useTerminalStore()
+const { isMacOS, isWindows, isLinux } = usePlatform()
 
 const handleMinimize = async () => {
   try {
@@ -83,8 +85,8 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 <template>
   <div class="tab-bar">
-    <!-- Window control buttons (macOS style) -->
-    <div class="window-controls">
+    <!-- macOS style window controls (left side) -->
+    <div v-if="isMacOS()" class="window-controls macos">
       <button class="control-btn close" @click="handleClose" title="Close"></button>
       <button class="control-btn minimize" @click="handleMinimize" title="Minimize"></button>
       <button class="control-btn maximize" @click="handleMaximize" title="Maximize"></button>
@@ -134,6 +136,25 @@ const handleKeydown = (e: KeyboardEvent) => {
     <button class="new-tab-btn" @click="handleNewTab" title="New tab">
       +
     </button>
+
+    <!-- Windows/Linux style window controls (right side) -->
+    <div v-if="isWindows() || isLinux()" class="window-controls windows-linux">
+      <button class="control-btn-win minimize" @click="handleMinimize" title="Minimize">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <rect x="0" y="4" width="10" height="1" fill="currentColor"/>
+        </svg>
+      </button>
+      <button class="control-btn-win maximize" @click="handleMaximize" title="Maximize">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <rect x="0" y="0" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1"/>
+        </svg>
+      </button>
+      <button class="control-btn-win close" @click="handleClose" title="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M0,0 L10,10 M10,0 L0,10" stroke="currentColor" stroke-width="1"/>
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -152,9 +173,13 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 .window-controls {
   display: flex;
+  -webkit-app-region: no-drag;
+}
+
+/* macOS style controls */
+.window-controls.macos {
   gap: 8px;
   padding: 0 4px;
-  -webkit-app-region: no-drag;
 }
 
 .control-btn {
@@ -177,7 +202,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   transition: opacity 0.15s;
 }
 
-.window-controls:hover .control-btn::before {
+.window-controls.macos:hover .control-btn::before {
   opacity: 1;
 }
 
@@ -213,6 +238,38 @@ const handleKeydown = (e: KeyboardEvent) => {
   color: #006400;
   font-weight: bold;
   line-height: 1;
+}
+
+/* Windows/Linux style controls */
+.window-controls.windows-linux {
+  gap: 0;
+}
+
+.control-btn-win {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 40px;
+  background: transparent;
+  border: none;
+  color: #cccccc;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.control-btn-win:hover {
+  background: #3e3e42;
+}
+
+.control-btn-win.close:hover {
+  background: #e81123;
+  color: white;
+}
+
+.control-btn-win svg {
+  width: 10px;
+  height: 10px;
 }
 
 .tab-list {
