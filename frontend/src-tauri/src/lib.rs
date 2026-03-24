@@ -9,6 +9,7 @@ use pty::manager::PtyManager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
@@ -48,6 +49,7 @@ pub fn run() {
             let mat_menu = SubmenuBuilder::new(app, "Mat")
                 .text("about", "About Mat")
                 .separator()
+                .text("check_updates", "Check for Updates...")
                 .text("settings", "Settings...")
                 .separator()
                 .hide()
@@ -66,6 +68,11 @@ pub fn run() {
                     "about" => {
                         if let Some(window) = app_handle.get_webview_window("main") {
                             let _ = window.emit("menu:about", ());
+                        }
+                    }
+                    "check_updates" => {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.emit("menu:check-updates", ());
                         }
                     }
                     "settings" => {
