@@ -136,6 +136,10 @@ const handleKeydown = (e: KeyboardEvent) => {
     <button class="new-tab-btn" @click="handleNewTab" title="New tab">
       +
     </button>
+    
+    <button class="settings-btn" @click="store.toggleSettings" title="Settings">
+      ⚙
+    </button>
 
     <!-- Windows/Linux style window controls (right side) -->
     <div v-if="isWindows() || isLinux()" class="window-controls windows-linux">
@@ -437,6 +441,33 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 .new-tab-btn:active {
+  background: #007acc;
+}
+
+.settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #2d2d30;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.15s;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.settings-btn:hover {
+  background: #37373d;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+.settings-btn:active {
   background: #007acc;
 }
 </style>

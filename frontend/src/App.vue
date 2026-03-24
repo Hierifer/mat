@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useKeyboardShortcuts } from '@/composables/use-keyboard-shortcuts'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import TabBar from '@/components/layout/tab-bar.vue'
 import SplitContainer from '@/components/layout/split-container.vue'
+import SettingsModal from '@/components/settings/settings-modal.vue'
+import AboutModal from '@/components/settings/about-modal.vue'
 
 const terminalStore = useTerminalStore()
 
 // Enable keyboard shortcuts
 useKeyboardShortcuts()
+
+let unlistenSettings: UnlistenFn | null = null
+let unlistenAbout: UnlistenFn | null = null
 
 onMounted(async () => {
   console.log('App mounted, creating initial tab...')
@@ -20,6 +26,24 @@ onMounted(async () => {
   } catch (error) {
     console.error('Failed to create initial tab:', error)
   }
+
+  // Listen for menu events
+  try {
+    unlistenSettings = await listen('menu:settings', () => {
+      terminalStore.toggleSettings()
+    })
+
+    unlistenAbout = await listen('menu:about', () => {
+      terminalStore.toggleAbout()
+    })
+  } catch (error) {
+    console.error('Failed to setup menu event listeners:', error)
+  }
+})
+
+onUnmounted(() => {
+  if (unlistenSettings) unlistenSettings()
+  if (unlistenAbout) unlistenAbout()
 })
 </script>
 
@@ -40,6 +64,12 @@ onMounted(async () => {
     <div v-if="terminalStore.tabs.length === 0" class="empty-state">
       No terminal sessions
     </div>
+
+    <!-- Settings Modal -->
+    <settings-modal v-if="terminalStore.isSettingsOpen" />
+
+    <!-- About Modal -->
+    <about-modal v-if="terminalStore.isAboutOpen" />
   </div>
 </template>
 

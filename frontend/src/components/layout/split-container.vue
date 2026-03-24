@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { SplitNode } from '@/stores/terminal-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import TerminalInstance from '@/components/terminal/terminal-instance.vue'
 import PaneToolbar from '@/components/terminal/pane-toolbar.vue'
 
@@ -8,9 +9,19 @@ const props = defineProps<{
   node: SplitNode
 }>()
 
+const store = useTerminalStore()
+
 const isPane = computed(() => props.node.type === 'pane')
 const isHorizontal = computed(() => props.node.type === 'horizontal')
 const isVertical = computed(() => props.node.type === 'vertical')
+const isActive = computed(() => store.activePaneId === props.node.paneId)
+const shouldDim = computed(() => store.dimInactivePanes && !isActive.value)
+
+const handlePaneClick = () => {
+  if (props.node.paneId) {
+    store.setActivePane(props.node.paneId)
+  }
+}
 
 const gridStyle = computed(() => {
   if (isHorizontal.value) {
@@ -31,7 +42,7 @@ const gridStyle = computed(() => {
 </script>
 
 <template>
-  <div v-if="isPane" class="pane">
+  <div v-if="isPane" class="pane" :class="{ dimmed: shouldDim, active: isActive }" @click="handlePaneClick">
     <pane-toolbar
       v-if="node.paneId && node.sessionId"
       :pane-id="node.paneId"
@@ -65,6 +76,16 @@ const gridStyle = computed(() => {
   background: #1e1e1e;
   border: 1px solid #333;
   overflow: hidden;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.pane.active {
+  border-color: #007acc;
+}
+
+.pane.dimmed {
+  filter: grayscale(0.4) brightness(0.85);
 }
 
 .terminal-wrapper {

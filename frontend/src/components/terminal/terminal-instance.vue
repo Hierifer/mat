@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { Terminal } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -62,29 +62,14 @@ onMounted(async () => {
     fontSize: 13,
     cursorBlink: true,
     allowTransparency: true,
-    theme: {
-      background: '#1e1e1e',
-      foreground: '#d4d4d4',
-      cursor: '#ffffff',
-      cursorAccent: '#000000',
-      selectionBackground: '#264f78',
-      black: '#000000',
-      red: '#cd3131',
-      green: '#0dbc79',
-      yellow: '#e5e510',
-      blue: '#2472c8',
-      magenta: '#bc3fbc',
-      cyan: '#11a8cd',
-      white: '#e5e5e5',
-      brightBlack: '#666666',
-      brightRed: '#f14c4c',
-      brightGreen: '#23d18b',
-      brightYellow: '#f5f543',
-      brightBlue: '#3b8eea',
-      brightMagenta: '#d670d6',
-      brightCyan: '#29b8db',
-      brightWhite: '#e5e5e5',
-    },
+    theme: store.currentTheme,
+  })
+
+  // Watch for theme changes
+  watch(() => store.currentThemeName, () => {
+    if (terminal) {
+      terminal.options.theme = store.currentTheme
+    }
   })
 
   fitAddon = new FitAddon()
@@ -140,7 +125,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="terminalRef" class="terminal-container" />
+  <div
+    ref="terminalRef"
+    class="terminal-container"
+    :style="{ backgroundColor: store.currentTheme.background }"
+  />
 </template>
 
 <style scoped>
@@ -148,6 +137,8 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   padding: 8px;
-  background: #1e1e1e;
+  padding-bottom: 32px; /* Ensure space at bottom */
+  box-sizing: border-box;
+  overflow: hidden;
 }
 </style>

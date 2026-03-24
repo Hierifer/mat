@@ -125,17 +125,19 @@ const handleKeydown = (e: KeyboardEvent) => {
   height: 24px;
   background: #2d2d2d;
   border-bottom: 1px solid #444;
+  border-top: 2px solid transparent;
   padding: 0 8px;
   font-size: 12px;
   font-family: monospace;
   color: #ccc;
   user-select: none;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
 
 .pane-toolbar.active {
   background: #3d3d3d;
+  border-top-color: #007acc;
   border-bottom-color: #007acc;
 }
 
