@@ -60,7 +60,7 @@
       "endpoints": [
         "https://github.com/Hierifer/mat/releases/latest/download/latest.json"
       ],
-      "pubkey": "PLACEHOLDER_PUBLIC_KEY_WILL_BE_GENERATED"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY2NERBRUJEOTY5MURGMTEKUldRUjM1R1d2YTVOOXZiYWthZzJxTHM0VE1ZWUdqK2txM2Jqc2pxbzBMQmw4aUlmdldZUzdrM1EK"
     }
   }
 }
