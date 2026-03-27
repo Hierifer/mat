@@ -1,18 +1,102 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useKeyboardShortcuts } from '@/composables/use-keyboard-shortcuts'
 import { useUpdater } from '@/composables/use-updater'
+import { useSpeechRecognition } from '@/composables/use-speech-recognition'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
 import TabBar from '@/components/layout/tab-bar.vue'
 import SplitContainer from '@/components/layout/split-container.vue'
 import SettingsModal from '@/components/settings/settings-modal.vue'
 import AboutModal from '@/components/settings/about-modal.vue'
 import UpdateDialog from '@/components/updater/update-dialog.vue'
+import SpeechIndicator from '@/components/speech/speech-indicator.vue'
 
 const terminalStore = useTerminalStore()
 const { updateInfo, checkForUpdates } = useUpdater()
 const showUpdateDialog = ref(false)
+
+// Speech recognition
+const {
+  isListening,
+  transcript,
+  displayTranscript,
+  error: speechError,
+  toggle: toggleSpeech,
+  stop: stopSpeech,
+  clear: clearTranscript,
+} = useSpeechRecognition()
+
+// Send speech text to active terminal
+const sendToTerminal = async (text: string) => {
+  const activeTab = terminalStore.activeTab
+  if (!activeTab) {
+    console.warn('[Speech] No active tab')
+    return
+  }
+
+  // Find the active pane's sessionId
+  let sessionId: string | undefined
+
+  const findSessionId = (node: any): string | undefined => {
+    if (node.type === 'pane' && node.paneId === terminalStore.activePaneId) {
+      return node.sessionId
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        const found = findSessionId(child)
+        if (found) return found
+      }
+    }
+    return undefined
+  }
+
+  sessionId = findSessionId(activeTab.layout)
+
+  if (!sessionId) {
+    console.warn('[Speech] No active session found')
+    return
+  }
+
+  try {
+    // @ts-ignore
+    if (window.__TAURI_INTERNALS__) {
+      await invoke('pty_write', {
+        sessionId,
+        data: text,
+      })
+      console.log(`[Speech] Sent to terminal: "${text}"`)
+    } else {
+      console.log(`[Speech] Mock mode - would send: "${text}"`)
+    }
+  } catch (error) {
+    console.error('[Speech] Failed to send to terminal:', error)
+  }
+}
+
+// Watch for transcript changes and send to terminal
+let lastSentLength = 0
+watch(transcript, (newTranscript) => {
+  if (newTranscript.length > lastSentLength && isListening.value) {
+    const newText = newTranscript.substring(lastSentLength)
+    if (newText.trim()) {
+      sendToTerminal(newText)
+      lastSentLength = newTranscript.length
+    }
+  }
+})
+
+// Reset when speech stops
+watch(isListening, (listening) => {
+  if (!listening) {
+    lastSentLength = 0
+    // Clear transcript after a short delay
+    setTimeout(() => {
+      clearTranscript()
+    }, 1000)
+  }
+})
 
 // Enable keyboard shortcuts
 useKeyboardShortcuts()
@@ -20,6 +104,14 @@ useKeyboardShortcuts()
 let unlistenSettings: UnlistenFn | null = null
 let unlistenAbout: UnlistenFn | null = null
 let unlistenCheckUpdates: UnlistenFn | null = null
+
+// Speech recognition keyboard shortcut (Ctrl+Shift+V or Cmd+Shift+V)
+const handleSpeechShortcut = (e: KeyboardEvent) => {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
+    e.preventDefault()
+    toggleSpeech()
+  }
+}
 
 onMounted(async () => {
   console.log('App mounted, creating initial tab...')
@@ -75,12 +167,17 @@ onMounted(async () => {
       // Silent failure for auto-check
     }
   }, 3000)
+
+  // Add keyboard shortcut for speech recognition
+  window.addEventListener('keydown', handleSpeechShortcut)
+  console.log('[App] Speech recognition shortcut registered (Ctrl+Shift+V)')
 })
 
 onUnmounted(() => {
   if (unlistenSettings) unlistenSettings()
   if (unlistenAbout) unlistenAbout()
   if (unlistenCheckUpdates) unlistenCheckUpdates()
+  window.removeEventListener('keydown', handleSpeechShortcut)
 })
 </script>
 
@@ -113,6 +210,14 @@ onUnmounted(() => {
       v-if="showUpdateDialog && updateInfo"
       :update-info="updateInfo"
       @close="showUpdateDialog = false"
+    />
+
+    <!-- Speech Recognition Indicator -->
+    <speech-indicator
+      :is-listening="isListening"
+      :transcript="displayTranscript"
+      :error="speechError"
+      @stop="stopSpeech"
     />
   </div>
 </template>
