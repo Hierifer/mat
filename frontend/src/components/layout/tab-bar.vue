@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, inject, type Ref } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { usePlatform } from '@/composables/use-platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 
 const store = useTerminalStore()
+
+// Inject speech recognition
+const speechRecognition = inject<{
+  isListening: Ref<boolean>
+  toggleSpeech: () => void
+}>('speechRecognition')
 const { isMacOS, isWindows, isLinux } = usePlatform()
 
 const handleMinimize = async () => {
@@ -136,7 +142,20 @@ const handleKeydown = (e: KeyboardEvent) => {
     <button class="new-tab-btn" @click="handleNewTab" title="New tab">
       +
     </button>
-    
+
+    <button
+      v-if="speechRecognition"
+      class="speech-btn"
+      :class="{ active: speechRecognition.isListening.value }"
+      @click="speechRecognition.toggleSpeech"
+      title="Voice input (Ctrl+Shift+V)"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M8 1C7.17 1 6.5 1.67 6.5 2.5V8C6.5 8.83 7.17 9.5 8 9.5C8.83 9.5 9.5 8.83 9.5 8V2.5C9.5 1.67 8.83 1 8 1Z" fill="currentColor"/>
+        <path d="M11 8C11 9.66 9.66 11 8 11C6.34 11 5 9.66 5 8H3.5C3.5 10.07 5.07 11.75 7 12.09V14H9V12.09C10.93 11.75 12.5 10.07 12.5 8H11Z" fill="currentColor"/>
+      </svg>
+    </button>
+
     <button class="settings-btn" @click="store.toggleSettings" title="Settings">
       ⚙
     </button>
@@ -442,6 +461,61 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 .new-tab-btn:active {
   background: #007acc;
+}
+
+.speech-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #2d2d30;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  position: relative;
+}
+
+.speech-btn:hover {
+  background: #37373d;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+.speech-btn:active {
+  background: #007acc;
+}
+
+.speech-btn.active {
+  background: #007acc;
+  border-color: #0078d4;
+  color: #ffffff;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 122, 204, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(0, 122, 204, 0);
+  }
+}
+
+.speech-btn.active::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #ff4444;
+  border-radius: 50%;
+  border: 2px solid #1e1e1e;
 }
 
 .settings-btn {

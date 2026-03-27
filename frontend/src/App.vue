@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch, provide } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useKeyboardShortcuts } from '@/composables/use-keyboard-shortcuts'
 import { useUpdater } from '@/composables/use-updater'
@@ -96,6 +96,12 @@ watch(isListening, (listening) => {
       clearTranscript()
     }, 1000)
   }
+})
+
+// Provide speech recognition to child components
+provide('speechRecognition', {
+  isListening,
+  toggleSpeech,
 })
 
 // Enable keyboard shortcuts
