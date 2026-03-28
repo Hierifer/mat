@@ -81,7 +81,25 @@ export function useSpeechRecognition() {
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error('[Speech] Recognition error:', event.error)
-      error.value = event.error
+
+      // Provide user-friendly error messages
+      switch (event.error) {
+        case 'not-allowed':
+          error.value = '麦克风权限被拒绝。请在系统设置中允许麦克风访问。'
+          break
+        case 'no-speech':
+          error.value = '未检测到语音输入'
+          break
+        case 'network':
+          error.value = '网络错误，请检查网络连接'
+          break
+        case 'aborted':
+          error.value = '语音识别已中止'
+          break
+        default:
+          error.value = `语音识别错误: ${event.error}`
+      }
+
       isListening.value = false
     }
 
