@@ -27,6 +27,7 @@ export const useTerminalStore = defineStore("terminal", {
     isSettingsOpen: false,
     isAboutOpen: false,
     dimInactivePanes: true, // 未聚焦窗格变灰功能
+    enableCommandNotifications: true, // Claude 命令完成通知
   }),
 
   getters: {
@@ -56,6 +57,10 @@ export const useTerminalStore = defineStore("terminal", {
 
     toggleDimInactivePanes() {
       this.dimInactivePanes = !this.dimInactivePanes;
+    },
+
+    toggleCommandNotifications() {
+      this.enableCommandNotifications = !this.enableCommandNotifications;
     },
 
     // Helper: Find node by paneId

@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { useNotification } from './use-notification'
+import { useTerminalStore } from '@/stores/terminal-store'
 
 interface RunningCommand {
   command: string
@@ -11,6 +12,7 @@ interface RunningCommand {
 export function useCommandMonitor() {
   const runningCommands = ref<Map<string, RunningCommand>>(new Map())
   const { notifyTaskComplete, notifyInfo } = useNotification()
+  const store = useTerminalStore()
 
   // Patterns to detect Claude commands
   const claudeCommandPatterns = [
@@ -110,11 +112,13 @@ export function useCommandMonitor() {
         outputLines: running.outputLines.length,
       })
 
-      // Send notification
-      await notifyTaskComplete(
-        'Claude 任务完成',
-        `命令执行完成 (用时 ${durationText})\n${truncateCommand(running.command)}`
-      )
+      // Send notification only if enabled
+      if (store.enableCommandNotifications) {
+        await notifyTaskComplete(
+          'Claude 任务完成',
+          `命令执行完成 (用时 ${durationText})\n${truncateCommand(running.command)}`
+        )
+      }
 
       // Clean up
       runningCommands.value.delete(sessionId)

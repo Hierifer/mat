@@ -72,6 +72,26 @@ const categories = [ 'Appearance', 'General', 'Shortcuts' ]
             </div>
           </div>
         </div>
+
+        <div v-if="activeCategory === 'General'" class="settings-section">
+          <div class="setting-item">
+            <label class="setting-label">Notifications</label>
+            <div class="setting-row">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  :checked="store.enableCommandNotifications"
+                  @change="store.toggleCommandNotifications"
+                  class="checkbox-input"
+                />
+                <span class="checkbox-text">Enable command completion notifications</span>
+              </label>
+              <p class="setting-description">
+                Send system notifications when Claude commands finish executing
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
