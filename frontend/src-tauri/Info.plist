@@ -4,5 +4,7 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Mat Terminal needs access to your microphone for voice-to-text input functionality.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Mat Terminal needs speech recognition to convert voice to text for terminal input.</string>
 </dict>
 </plist>

@@ -87,6 +87,9 @@ export function useSpeechRecognition() {
         case 'not-allowed':
           error.value = '麦克风权限被拒绝。请在系统设置中允许麦克风访问。'
           break
+        case 'service-not-allowed':
+          error.value = 'macOS WebView 不支持语音识别服务。请考虑使用 Chrome 浏览器或安装原生语音识别插件。'
+          break
         case 'no-speech':
           error.value = '未检测到语音输入'
           break
