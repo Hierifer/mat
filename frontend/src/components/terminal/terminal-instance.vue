@@ -6,6 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import 'xterm/css/xterm.css'
 import { usePtySession } from '@/composables/use-pty-session'
 import { useTerminalStore } from '@/stores/terminal-store'
+import { useCommandMonitor } from '@/composables/use-command-monitor'
 
 const props = defineProps<{
   sessionId: string
@@ -21,6 +22,10 @@ let isUnmounting = false
 
 const store = useTerminalStore()
 const { connect, write, resize } = usePtySession(props.sessionId)
+const { monitorInput, processOutput, stopMonitoring } = useCommandMonitor()
+
+// Buffer to accumulate input for command detection
+let inputBuffer = ''
 
 // Function to parse OSC 7 (current directory) from terminal output
 const parseOSC7 = (data: Uint8Array): string | null => {
@@ -85,6 +90,24 @@ onMounted(async () => {
   // Handle user input
   terminal.onData((data) => {
     write(data)
+
+    // Monitor input for command detection
+    if (data === '\r' || data === '\n') {
+      // Enter key pressed - check if it's a Claude command
+      if (inputBuffer.trim()) {
+        monitorInput(props.sessionId, inputBuffer.trim())
+      }
+      inputBuffer = ''
+    } else if (data === '\x7f' || data === '\b') {
+      // Backspace - remove last character
+      inputBuffer = inputBuffer.slice(0, -1)
+    } else if (data === '\x03') {
+      // Ctrl+C - clear buffer
+      inputBuffer = ''
+    } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
+      // Regular printable character
+      inputBuffer += data
+    }
   })
 
   // Connect to PTY session
@@ -99,6 +122,10 @@ onMounted(async () => {
 
     // Write data to terminal
     terminal?.write(data)
+
+    // Monitor output for command completion
+    const outputText = new TextDecoder().decode(data)
+    processOutput(props.sessionId, outputText)
   })
 
   // Handle resize with debouncing
@@ -121,6 +148,9 @@ onUnmounted(() => {
   }
   resizeObserver?.disconnect()
   terminal?.dispose()
+
+  // Stop monitoring this session
+  stopMonitoring(props.sessionId)
 })
 </script>
 
