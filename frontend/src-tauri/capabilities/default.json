@@ -16,7 +16,6 @@
     "core:window:allow-toggle-maximize",
     "core:app:default",
     "core:app:allow-name",
-    "core:app:allow-version",
-    "stt:default"
+    "core:app:allow-version"
   ]
 }

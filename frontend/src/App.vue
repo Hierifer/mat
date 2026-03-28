@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref, watch, provide } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useKeyboardShortcuts } from '@/composables/use-keyboard-shortcuts'
 import { useUpdater } from '@/composables/use-updater'
-import { useNativeSpeech } from '@/composables/use-native-speech'
+import { useSpeechRecognition } from '@/composables/use-speech-recognition'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import TabBar from '@/components/layout/tab-bar.vue'
@@ -17,7 +17,7 @@ const terminalStore = useTerminalStore()
 const { updateInfo, checkForUpdates } = useUpdater()
 const showUpdateDialog = ref(false)
 
-// Native speech recognition
+// Speech recognition (Web Speech API)
 const {
   isListening,
   transcript,
@@ -26,7 +26,7 @@ const {
   toggle: toggleSpeech,
   stop: stopSpeech,
   clear: clearTranscript,
-} = useNativeSpeech()
+} = useSpeechRecognition()
 
 // Send speech text to active terminal
 const sendToTerminal = async (text: string) => {

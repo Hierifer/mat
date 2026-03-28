@@ -13,7 +13,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_stt::init())
         .setup(|app| {
             // Use tokio Mutex for async compatibility in commands
             let pty_manager = Arc::new(Mutex::new(PtyManager::new()));
