@@ -24,10 +24,13 @@ export const useTerminalStore = defineStore("terminal", {
     activeTabId: null as string | null,
     activePaneId: null as string | null,
     currentThemeName: "VS Code Dark" as string,
+    themeMode: 'auto' as 'auto' | 'light' | 'dark', // 主题模式
     isSettingsOpen: false,
     isAboutOpen: false,
     dimInactivePanes: true, // 未聚焦窗格变灰功能
     enableCommandNotifications: true, // Claude 命令完成通知
+    fontSize: 13 as number, // 字体大小
+    locale: 'zh-CN' as string, // 语言
   }),
 
   getters: {
@@ -61,6 +64,52 @@ export const useTerminalStore = defineStore("terminal", {
 
     toggleCommandNotifications() {
       this.enableCommandNotifications = !this.enableCommandNotifications;
+    },
+
+    setThemeMode(mode: 'auto' | 'light' | 'dark') {
+      this.themeMode = mode;
+      this.applyThemeMode();
+    },
+
+    setFontSize(size: number) {
+      this.fontSize = Math.max(8, Math.min(32, size)); // 限制范围 8-32
+    },
+
+    increaseFontSize() {
+      this.setFontSize(this.fontSize + 1);
+    },
+
+    decreaseFontSize() {
+      this.setFontSize(this.fontSize - 1);
+    },
+
+    resetFontSize() {
+      this.setFontSize(13);
+    },
+
+    setLocale(locale: string) {
+      this.locale = locale;
+    },
+
+    applyThemeMode() {
+      if (this.themeMode === 'auto') {
+        // 检测系统主题
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const defaultTheme = prefersDark ? 'VS Code Dark' : 'VS Code Light';
+        if (this.currentThemeName.includes('Dark') || this.currentThemeName.includes('Light')) {
+          this.setTheme(defaultTheme);
+        }
+      } else if (this.themeMode === 'light') {
+        // 切换到浅色主题
+        if (this.currentThemeName.includes('Dark')) {
+          this.setTheme('VS Code Light');
+        }
+      } else if (this.themeMode === 'dark') {
+        // 切换到深色主题
+        if (this.currentThemeName.includes('Light')) {
+          this.setTheme('VS Code Dark');
+        }
+      }
     },
 
     // Helper: Find node by paneId

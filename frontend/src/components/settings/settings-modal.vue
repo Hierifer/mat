@@ -1,19 +1,32 @@
 <script setup lang="ts">
 import { useTerminalStore } from '@/stores/terminal-store'
 import { themes } from '@/settings/themes'
-import { ref } from 'vue'
+import { availableLocales } from '@/i18n'
+import { useI18n } from 'vue-i18n'
+import { ref, watch } from 'vue'
 
 const store = useTerminalStore()
+const { locale, t } = useI18n()
 const activeCategory = ref('Appearance')
 
-const categories = [ 'Appearance', 'General', 'Shortcuts' ]
+const categories = [ 'Appearance', 'General', 'View', 'Shortcuts' ]
+
+// Sync locale with store
+watch(() => store.locale, (newLocale) => {
+  locale.value = newLocale
+}, { immediate: true })
+
+const changeLocale = (newLocale: string) => {
+  store.setLocale(newLocale)
+  locale.value = newLocale
+}
 </script>
 
 <template>
   <div class="settings-overlay" @click.self="store.toggleSettings">
     <div class="settings-modal">
       <div class="settings-sidebar">
-        <h2 class="settings-title">Preferences</h2>
+        <h2 class="settings-title">{{ $t('settings.title') }}</h2>
         <ul class="settings-categories">
           <li
             v-for="category in categories"
@@ -22,19 +35,58 @@ const categories = [ 'Appearance', 'General', 'Shortcuts' ]
             :class="{ active: activeCategory === category }"
             @click="activeCategory = category"
           >
-            {{ category }}
+            {{ $t(`settings.${category.toLowerCase()}`) }}
           </li>
         </ul>
       </div>
       <div class="settings-content">
         <div class="settings-header">
-            <h3>{{ activeCategory }}</h3>
+            <h3>{{ $t(`settings.${activeCategory.toLowerCase()}`) }}</h3>
             <button class="close-btn" @click="store.toggleSettings">✕</button>
         </div>
         
         <div v-if="activeCategory === 'Appearance'" class="settings-section">
           <div class="setting-item">
-            <label class="setting-label">Color Theme</label>
+            <label class="setting-label">{{ $t('settings.themeMode') }}</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input
+                  type="radio"
+                  name="themeMode"
+                  value="auto"
+                  :checked="store.themeMode === 'auto'"
+                  @change="store.setThemeMode('auto')"
+                  class="radio-input"
+                />
+                <span class="radio-text">{{ $t('settings.themeModeAuto') }}</span>
+              </label>
+              <label class="radio-label">
+                <input
+                  type="radio"
+                  name="themeMode"
+                  value="light"
+                  :checked="store.themeMode === 'light'"
+                  @change="store.setThemeMode('light')"
+                  class="radio-input"
+                />
+                <span class="radio-text">{{ $t('settings.themeModeLight') }}</span>
+              </label>
+              <label class="radio-label">
+                <input
+                  type="radio"
+                  name="themeMode"
+                  value="dark"
+                  :checked="store.themeMode === 'dark'"
+                  @change="store.setThemeMode('dark')"
+                  class="radio-input"
+                />
+                <span class="radio-text">{{ $t('settings.themeModeDark') }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">{{ $t('settings.colorTheme') }}</label>
             <div class="theme-grid">
               <div
                 v-for="themeName in store.availableThemes"
@@ -55,7 +107,7 @@ const categories = [ 'Appearance', 'General', 'Shortcuts' ]
           </div>
 
           <div class="setting-item">
-            <label class="setting-label">Window Appearance</label>
+            <label class="setting-label">{{ $t('settings.windowAppearance') }}</label>
             <div class="setting-row">
               <label class="checkbox-label">
                 <input
@@ -64,10 +116,10 @@ const categories = [ 'Appearance', 'General', 'Shortcuts' ]
                   @change="store.toggleDimInactivePanes"
                   class="checkbox-input"
                 />
-                <span class="checkbox-text">Dim inactive panes</span>
+                <span class="checkbox-text">{{ $t('settings.dimInactivePanes') }}</span>
               </label>
               <p class="setting-description">
-                Apply grayscale effect to unfocused terminal panes
+                {{ $t('settings.dimInactivePanesDesc') }}
               </p>
             </div>
           </div>
@@ -75,7 +127,24 @@ const categories = [ 'Appearance', 'General', 'Shortcuts' ]
 
         <div v-if="activeCategory === 'General'" class="settings-section">
           <div class="setting-item">
-            <label class="setting-label">Notifications</label>
+            <label class="setting-label">{{ $t('settings.language') }}</label>
+            <select
+              v-model="store.locale"
+              @change="changeLocale(store.locale)"
+              class="select-input"
+            >
+              <option
+                v-for="loc in availableLocales"
+                :key="loc.code"
+                :value="loc.code"
+              >
+                {{ loc.name }}
+              </option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">{{ $t('settings.notifications') }}</label>
             <div class="setting-row">
               <label class="checkbox-label">
                 <input
@@ -84,12 +153,35 @@ const categories = [ 'Appearance', 'General', 'Shortcuts' ]
                   @change="store.toggleCommandNotifications"
                   class="checkbox-input"
                 />
-                <span class="checkbox-text">Enable command completion notifications</span>
+                <span class="checkbox-text">{{ $t('settings.enableCommandNotifications') }}</span>
               </label>
               <p class="setting-description">
-                Send system notifications when Claude commands finish executing
+                {{ $t('settings.enableCommandNotificationsDesc') }}
               </p>
             </div>
+          </div>
+        </div>
+
+        <div v-if="activeCategory === 'View'" class="settings-section">
+          <div class="setting-item">
+            <label class="setting-label">{{ $t('settings.fontSize') }}</label>
+            <p class="setting-description" style="padding-left: 0; margin-bottom: 15px;">
+              {{ $t('settings.fontSizeDesc') }}
+            </p>
+            <div class="font-size-controls">
+              <button @click="store.decreaseFontSize()" class="font-btn">-</button>
+              <span class="font-size-value">{{ store.fontSize }}px</span>
+              <button @click="store.increaseFontSize()" class="font-btn">+</button>
+              <button @click="store.resetFontSize()" class="font-reset-btn">Reset</button>
+            </div>
+            <input
+              type="range"
+              min="8"
+              max="32"
+              :value="store.fontSize"
+              @input="store.setFontSize(Number(($event.target as HTMLInputElement).value))"
+              class="font-slider"
+            />
           </div>
         </div>
       </div>
@@ -292,5 +384,116 @@ const categories = [ 'Appearance', 'General', 'Shortcuts' ]
   font-size: 12px;
   color: #999;
   padding-left: 28px;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.radio-input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #0078d4;
+}
+
+.radio-text {
+  color: #e7e7e7;
+  user-select: none;
+}
+
+.select-input {
+  width: 100%;
+  max-width: 300px;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #e7e7e7;
+  background: #3c3c3c;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+}
+
+.select-input:hover {
+  background: #454545;
+}
+
+.select-input:focus {
+  border-color: #0078d4;
+}
+
+.font-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.font-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #555;
+  background: #3c3c3c;
+  color: #e7e7e7;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.font-btn:hover {
+  background: #454545;
+  border-color: #0078d4;
+}
+
+.font-btn:active {
+  background: #2d2d30;
+}
+
+.font-size-value {
+  min-width: 60px;
+  text-align: center;
+  font-size: 16px;
+  color: #e7e7e7;
+  font-weight: 500;
+}
+
+.font-reset-btn {
+  margin-left: auto;
+  padding: 8px 16px;
+  border: 1px solid #555;
+  background: #3c3c3c;
+  color: #e7e7e7;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.font-reset-btn:hover {
+  background: #454545;
+  border-color: #0078d4;
+}
+
+.font-slider {
+  width: 100%;
+  height: 4px;
+  background: #3c3c3c;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  accent-color: #0078d4;
 }
 </style>

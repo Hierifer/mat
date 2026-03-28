@@ -5,7 +5,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import 'xterm/css/xterm.css'
 import { usePtySession } from '@/composables/use-pty-session'
-import { useTerminalStore } from '@/stores/terminal-store'
+import { useTerminalStore, type SplitNode } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
 
 const props = defineProps<{
@@ -21,11 +21,13 @@ let resizeTimeout: number | null = null
 let isUnmounting = false
 
 const store = useTerminalStore()
-const { connect, write, resize } = usePtySession(props.sessionId)
+const { connect, write, resize, isConnected } = usePtySession(props.sessionId)
 const { monitorInput, processOutput, stopMonitoring } = useCommandMonitor()
 
 // Buffer to accumulate input for command detection
 let inputBuffer = ''
+// Track if we've received any data
+let hasReceivedData = false
 
 // Function to parse OSC 7 (current directory) from terminal output
 const parseOSC7 = (data: Uint8Array): string | null => {
@@ -64,7 +66,7 @@ onMounted(async () => {
   // Initialize xterm.js
   terminal = new Terminal({
     fontFamily: '"JetBrains Mono", "Courier New", monospace',
-    fontSize: 13,
+    fontSize: store.fontSize,
     cursorBlink: true,
     allowTransparency: true,
     theme: store.currentTheme,
@@ -74,6 +76,14 @@ onMounted(async () => {
   watch(() => store.currentThemeName, () => {
     if (terminal) {
       terminal.options.theme = store.currentTheme
+    }
+  })
+
+  // Watch for font size changes
+  watch(() => store.fontSize, (newSize) => {
+    if (terminal) {
+      terminal.options.fontSize = newSize
+      fitAddon?.fit()
     }
   })
 
@@ -112,6 +122,8 @@ onMounted(async () => {
 
   // Connect to PTY session
   await connect((data) => {
+    hasReceivedData = true
+
     // Parse OSC 7 sequences for directory tracking
     if (props.paneId) {
       const newDir = parseOSC7(data)
@@ -127,6 +139,42 @@ onMounted(async () => {
     const outputText = new TextDecoder().decode(data)
     processOutput(props.sessionId, outputText)
   })
+
+  // Watch for tab switches - if no data received, trigger refresh
+  watch(() => store.activeTabId, async (newTabId) => {
+    // Check if this terminal's tab just became active
+    const currentTab = store.tabs.find(t => t.id === newTabId)
+    if (!currentTab) return
+
+    // Check if this session belongs to the active tab
+    const sessionBelongsToTab = (node: any): boolean => {
+      if (node.type === 'pane' && node.sessionId === props.sessionId) {
+        return true
+      }
+      if (node.children) {
+        return node.children.some((child: any) => sessionBelongsToTab(child))
+      }
+      return false
+    }
+
+    if (sessionBelongsToTab(currentTab.layout)) {
+      // This terminal's tab just became active
+      // Wait a bit then check if we have data
+      setTimeout(async () => {
+        if (!hasReceivedData && isConnected.value && terminal) {
+          console.log(`[Terminal] Tab activated but no data received for session ${props.sessionId}, triggering refresh`)
+          // Try to trigger shell to redraw by resizing
+          fitAddon?.fit()
+          const dims = fitAddon?.proposeDimensions()
+          if (dims) {
+            await resize(dims.cols, dims.rows)
+          }
+          // Send a newline to potentially trigger a prompt redraw
+          write('\n')
+        }
+      }, 200)
+    }
+  }, { immediate: false })
 
   // Handle resize with debouncing
   resizeObserver = new ResizeObserver(() => {

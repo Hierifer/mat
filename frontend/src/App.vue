@@ -118,6 +118,7 @@ useKeyboardShortcuts()
 let unlistenSettings: UnlistenFn | null = null
 let unlistenAbout: UnlistenFn | null = null
 let unlistenCheckUpdates: UnlistenFn | null = null
+let cleanupThemeListener: (() => void) | null = null
 
 // Speech recognition keyboard shortcut (Ctrl+Shift+V or Cmd+Shift+V)
 const handleSpeechShortcut = (e: KeyboardEvent) => {
@@ -188,6 +189,22 @@ onMounted(async () => {
   // Add keyboard shortcut for speech recognition
   window.addEventListener('keydown', handleSpeechShortcut)
   console.log('[App] Speech recognition shortcut registered (Ctrl+Shift+V)')
+
+  // Apply initial theme mode and setup system theme listener
+  terminalStore.applyThemeMode()
+
+  const themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+  const handleThemeChange = () => {
+    if (terminalStore.themeMode === 'auto') {
+      terminalStore.applyThemeMode()
+    }
+  }
+  themeMediaQuery.addEventListener('change', handleThemeChange)
+
+  // Store the cleanup function
+  cleanupThemeListener = () => {
+    themeMediaQuery.removeEventListener('change', handleThemeChange)
+  }
 })
 
 onUnmounted(() => {
@@ -195,6 +212,7 @@ onUnmounted(() => {
   if (unlistenAbout) unlistenAbout()
   if (unlistenCheckUpdates) unlistenCheckUpdates()
   window.removeEventListener('keydown', handleSpeechShortcut)
+  if (cleanupThemeListener) cleanupThemeListener()
 })
 </script>
 
