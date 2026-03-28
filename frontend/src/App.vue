@@ -4,6 +4,7 @@ import { useTerminalStore } from '@/stores/terminal-store'
 import { useKeyboardShortcuts } from '@/composables/use-keyboard-shortcuts'
 import { useUpdater } from '@/composables/use-updater'
 import { useSpeechRecognition } from '@/composables/use-speech-recognition'
+import { useNotification } from '@/composables/use-notification'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import TabBar from '@/components/layout/tab-bar.vue'
@@ -16,6 +17,9 @@ import SpeechIndicator from '@/components/speech/speech-indicator.vue'
 const terminalStore = useTerminalStore()
 const { updateInfo, checkForUpdates } = useUpdater()
 const showUpdateDialog = ref(false)
+
+// Notification system
+const { notifyTaskComplete, notifySuccess, notifyInfo } = useNotification()
 
 // Speech recognition (Web Speech API)
 const {
@@ -150,9 +154,11 @@ onMounted(async () => {
         const hasUpdate = await checkForUpdates(false)
         if (hasUpdate) {
           showUpdateDialog.value = true
+          await notifyInfo('发现新版本', '点击更新对话框查看详情')
         } else {
           // Show "already up to date" message
           alert('您已经在使用最新版本！')
+          await notifySuccess('已是最新版本', '您正在使用最新版本的 Mat Terminal')
         }
       } catch (error) {
         console.error('[App] Update check failed:', error)
@@ -171,6 +177,7 @@ onMounted(async () => {
       if (hasUpdate) {
         console.log('[App] Update available, showing dialog')
         showUpdateDialog.value = true
+        await notifyInfo('🎉 发现新版本', '有新版本可用，点击查看更新详情')
       }
     } catch (error) {
       console.error('[App] Auto update check failed:', error)

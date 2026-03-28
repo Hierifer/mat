@@ -11,6 +11,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2.9.1
         version: 2.10.1
+      '@tauri-apps/plugin-notification':
+        specifier: ^2.3.3
+        version: 2.3.3
       '@tauri-apps/plugin-opener':
         specifier: ^2.5.2
         version: 2.5.3
@@ -35,9 +38,6 @@ importers:
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@5.9.3)(vue@3.5.31(typescript@5.9.3))
-      tauri-plugin-stt-api:
-        specifier: ^0.1.0
-        version: 0.1.1
       vue:
         specifier: ^3.5.30
         version: 3.5.31(typescript@5.9.3)
@@ -403,6 +403,9 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
+  '@tauri-apps/plugin-notification@2.3.3':
+    resolution: {integrity: sha512-Zw+ZH18RJb41G4NrfHgIuofJiymusqN+q8fGUIIV7vyCH+5sSn5coqRv/MWB9qETsUs97vmU045q7OyseCV3Qg==}
+
   '@tauri-apps/plugin-opener@2.5.3':
     resolution: {integrity: sha512-CCcUltXMOfUEArbf3db3kCE7Ggy1ExBEBl51Ko2ODJ6GDYHRp1nSNlQm5uNCFY5k7/ufaK5Ib3Du/Zir19IYQQ==}
 
@@ -699,9 +702,6 @@ packages:
   tapable@2.3.2:
     resolution: {integrity: sha512-1MOpMXuhGzGL5TTCZFItxCc0AARf1EZFQkGqMm7ERKj8+Hgr5oLvJOVFcC+lRmR8hCe2S3jC4T5D7Vg/d7/fhA==}
     engines: {node: '>=6'}
-
-  tauri-plugin-stt-api@0.1.1:
-    resolution: {integrity: sha512-+fzzdI3q4Qv9EOUKYMVZCDnii9z+wDMP8NV0YSBcOBN4VcScb2IFB596Cz3OZ+ji/MbTS6Xapt4aR248Fudn8Q==}
 
   tinyglobby@0.2.15:
     resolution: {integrity: sha512-j2Zq4NyQYG5XMST4cbs02Ak8iJUdxRM0XI5QyxXuZOzKOINmWurp3smXu3y5wDcJrptwpSjgXHzIQxR0omXljQ==}
@@ -1012,6 +1012,10 @@ snapshots:
       '@tauri-apps/cli-win32-ia32-msvc': 2.10.1
       '@tauri-apps/cli-win32-x64-msvc': 2.10.1
 
+  '@tauri-apps/plugin-notification@2.3.3':
+    dependencies:
+      '@tauri-apps/api': 2.10.1
+
   '@tauri-apps/plugin-opener@2.5.3':
     dependencies:
       '@tauri-apps/api': 2.10.1
@@ -1305,10 +1309,6 @@ snapshots:
   tailwindcss@4.2.2: {}
 
   tapable@2.3.2: {}
-
-  tauri-plugin-stt-api@0.1.1:
-    dependencies:
-      '@tauri-apps/api': 2.10.1
 
   tinyglobby@0.2.15:
     dependencies:
