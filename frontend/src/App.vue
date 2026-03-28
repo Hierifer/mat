@@ -62,9 +62,13 @@ const sendToTerminal = async (text: string) => {
   try {
     // @ts-ignore
     if (window.__TAURI_INTERNALS__) {
+      // Convert string to UTF-8 byte array
+      const encoder = new TextEncoder()
+      const bytes = encoder.encode(text)
+
       await invoke('pty_write', {
         sessionId,
-        data: text,
+        data: Array.from(bytes),
       })
       console.log(`[Speech] Sent to terminal: "${text}"`)
     } else {
