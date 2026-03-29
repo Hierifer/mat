@@ -41,13 +41,25 @@ export function useSpeechRecognition() {
   const interimTranscript = ref('')
   const isSupported = ref(false)
   const error = ref<string | null>(null)
+  const isMacOS = ref(false)
 
   let recognition: SpeechRecognition | null = null
+  let hasTestedPermissions = false
 
   // Check if browser supports speech recognition
   const checkSupport = () => {
+    // Detect macOS
+    isMacOS.value = navigator.platform.toLowerCase().includes('mac')
+
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-      isSupported.value = true
+      // On macOS, Web Speech API exists but doesn't work in WKWebView
+      // We'll test permissions when user actually tries to use it
+      if (isMacOS.value) {
+        isSupported.value = false // Assume not supported on macOS until proven otherwise
+        console.warn('[Speech] Running on macOS - Web Speech API may not work in WKWebView')
+      } else {
+        isSupported.value = true
+      }
       return true
     }
     isSupported.value = false
@@ -160,6 +172,9 @@ export function useSpeechRecognition() {
       recognition.stop()
       console.log('[Speech] Stopping recognition...')
     }
+    // Clear error when manually stopping
+    error.value = null
+    isListening.value = false
   }
 
   // Toggle listening
@@ -188,6 +203,7 @@ export function useSpeechRecognition() {
   const clear = () => {
     transcript.value = ''
     interimTranscript.value = ''
+    error.value = null
   }
 
   // Combined transcript for display

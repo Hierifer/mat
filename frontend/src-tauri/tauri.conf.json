@@ -49,8 +49,7 @@
       "entitlements": "entitlements.plist",
       "frameworks": [],
       "providerShortName": null,
-      "signingIdentity": "-",
-      "info": "Info.plist"
+      "signingIdentity": "-"
     },
     "windows": {
       "webviewInstallMode": {
