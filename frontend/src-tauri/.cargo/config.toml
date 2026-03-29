@@ -1,0 +1,11 @@
+# Cargo configuration for Mat Terminal
+# This file sets build environment variables for all cargo commands
+
+[env]
+# Whisper compilation flags for ARM Macs (M1/M2/M3)
+# These disable x86-specific CPU features that are not available on ARM
+WHISPER_DONT_GENERATE_BINDINGS = "1"
+WHISPER_NO_AVX = "1"
+WHISPER_NO_AVX2 = "1"
+WHISPER_NO_FMA = "1"
+WHISPER_NO_F16C = "1"
