@@ -18,6 +18,20 @@ export interface SplitNode {
   size?: number // percentage
 }
 
+export interface TmuxSessionInfo {
+  name: string
+  attached: boolean
+  created: number
+  windows: number
+}
+
+export interface AppSettings {
+  tmuxEnabled: boolean
+  tmuxScrollbackLimit: number
+  autoRestoreSessions: boolean
+  sessionMapping: Record<string, string>
+}
+
 export const useTerminalStore = defineStore("terminal", {
   state: () => ({
     tabs: [] as TerminalTab[],
@@ -31,6 +45,12 @@ export const useTerminalStore = defineStore("terminal", {
     enableCommandNotifications: true, // Claude 命令完成通知
     fontSize: 13 as number, // 字体大小
     locale: 'zh-CN' as string, // 语言
+    // tmux related
+    tmuxEnabled: false,
+    tmuxSessions: [] as TmuxSessionInfo[],
+    sessionMapping: {} as Record<string, string>, // paneId -> tmux session name
+    autoRestoreSessions: false,
+    isSessionManagerOpen: false,
   }),
 
   getters: {
@@ -381,6 +401,243 @@ export const useTerminalStore = defineStore("terminal", {
       }
 
       return false;
+    },
+
+    // ============================================================================
+    // tmux Actions
+    // ============================================================================
+
+    async initTmux() {
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return;
+
+        // Load settings from backend
+        const settings = await invoke<AppSettings>('settings_get');
+        this.tmuxEnabled = settings.tmuxEnabled;
+        this.autoRestoreSessions = settings.autoRestoreSessions;
+        this.sessionMapping = settings.sessionMapping;
+
+        if (this.tmuxEnabled) {
+          await this.loadTmuxSessions();
+        }
+      } catch (error) {
+        console.error('Failed to initialize tmux:', error);
+      }
+    },
+
+    async toggleTmux(enabled: boolean) {
+      this.tmuxEnabled = enabled;
+      try {
+        await invoke('settings_update', {
+          settings: {
+            tmuxEnabled: enabled,
+            tmuxScrollbackLimit: 0,
+            autoRestoreSessions: this.autoRestoreSessions,
+            sessionMapping: this.sessionMapping,
+          }
+        });
+
+        if (enabled) {
+          await this.loadTmuxSessions();
+        }
+      } catch (error) {
+        console.error('Failed to toggle tmux:', error);
+      }
+    },
+
+    async loadTmuxSessions() {
+      try {
+        this.tmuxSessions = await invoke<TmuxSessionInfo[]>('tmux_list_sessions');
+      } catch (error) {
+        console.error('Failed to load tmux sessions:', error);
+        this.tmuxSessions = [];
+      }
+    },
+
+    async createTabWithTmux(sessionName?: string) {
+      const tabId = `tab_${Date.now()}`;
+      const paneId = `pane_${Date.now()}`;
+
+      let sessionId = `mock_session_${Date.now()}`;
+      let cwd = "~";
+
+      try {
+        // @ts-ignore
+        if (window.__TAURI_INTERNALS__) {
+          const response = await invoke<{ session_id: string; cwd: string }>(
+            "pty_spawn",
+            {
+              cols: 80,
+              rows: 24,
+              tmuxEnabled: this.tmuxEnabled,
+              tmuxSessionName: sessionName,
+            },
+          );
+          sessionId = response.session_id;
+          cwd = response.cwd;
+
+          // Store session mapping if tmux is enabled
+          if (this.tmuxEnabled && sessionName) {
+            this.sessionMapping[paneId] = sessionName;
+            await this.saveSessionMapping();
+          }
+
+          console.log(`[Store] Created PTY session: ${sessionId}`);
+        }
+      } catch (error) {
+        console.error("Failed to spawn PTY session:", error);
+      }
+
+      const tab: TerminalTab = {
+        id: tabId,
+        title: sessionName || "Terminal",
+        layout: {
+          type: "pane",
+          paneId,
+          sessionId,
+          cwd,
+        },
+        createdAt: Date.now(),
+      };
+
+      this.tabs.push(tab);
+      this.activeTabId = tabId;
+      this.activePaneId = paneId;
+    },
+
+    async attachToTmuxSession(sessionName: string) {
+      const tabId = `tab_${Date.now()}`;
+      const paneId = `pane_${Date.now()}`;
+
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) {
+          console.warn('Cannot attach to tmux session: Not in Tauri environment');
+          return;
+        }
+
+        const response = await invoke<{ session_id: string; cwd: string }>(
+          "tmux_attach_session",
+          {
+            name: sessionName,
+            cols: 80,
+            rows: 24,
+          },
+        );
+
+        // Store session mapping
+        this.sessionMapping[paneId] = sessionName;
+        await this.saveSessionMapping();
+
+        const tab: TerminalTab = {
+          id: tabId,
+          title: sessionName,
+          layout: {
+            type: "pane",
+            paneId,
+            sessionId: response.session_id,
+            cwd: response.cwd,
+          },
+          createdAt: Date.now(),
+        };
+
+        this.tabs.push(tab);
+        this.activeTabId = tabId;
+        this.activePaneId = paneId;
+
+        await this.loadTmuxSessions();
+      } catch (error) {
+        console.error('Failed to attach to tmux session:', error);
+      }
+    },
+
+    async restoreSessions() {
+      try {
+        const sessions = await invoke<TmuxSessionInfo[]>('tmux_list_sessions');
+
+        if (sessions.length === 0) {
+          // No sessions to restore, create default
+          await this.createTab();
+          return;
+        }
+
+        // Restore each MAT session as a tab
+        for (const session of sessions) {
+          if (session.name.startsWith('mat_')) {
+            await this.attachToTmuxSession(session.name);
+          }
+        }
+
+        console.log(`Restored ${sessions.length} tmux sessions`);
+      } catch (error) {
+        console.error('Failed to restore sessions:', error);
+        await this.createTab(); // Fallback to default tab
+      }
+    },
+
+    async killTmuxSession(sessionName: string) {
+      try {
+        await invoke('tmux_kill_session', { name: sessionName });
+        await this.loadTmuxSessions();
+
+        // Remove from session mapping
+        for (const [paneId, name] of Object.entries(this.sessionMapping)) {
+          if (name === sessionName) {
+            delete this.sessionMapping[paneId];
+          }
+        }
+        await this.saveSessionMapping();
+
+        console.log(`Killed tmux session: ${sessionName}`);
+      } catch (error) {
+        console.error('Failed to kill tmux session:', error);
+      }
+    },
+
+    async renameTmuxSession(oldName: string, newName: string) {
+      try {
+        await invoke('tmux_rename_session', { oldName, newName });
+        await this.loadTmuxSessions();
+
+        // Update session mapping
+        for (const [paneId, name] of Object.entries(this.sessionMapping)) {
+          if (name === oldName) {
+            this.sessionMapping[paneId] = newName;
+          }
+        }
+        await this.saveSessionMapping();
+
+        // Update tab titles
+        for (const tab of this.tabs) {
+          if (tab.title === oldName) {
+            tab.title = newName;
+          }
+        }
+
+        console.log(`Renamed tmux session: ${oldName} -> ${newName}`);
+      } catch (error) {
+        console.error('Failed to rename tmux session:', error);
+      }
+    },
+
+    async saveSessionMapping() {
+      try {
+        await invoke('settings_update', {
+          settings: {
+            tmuxEnabled: this.tmuxEnabled,
+            tmuxScrollbackLimit: 0,
+            autoRestoreSessions: this.autoRestoreSessions,
+            sessionMapping: this.sessionMapping,
+          }
+        });
+      } catch (error) {
+        console.error('Failed to save session mapping:', error);
+      }
+    },
+
+    toggleSessionManager() {
+      this.isSessionManagerOpen = !this.isSessionManagerOpen;
     },
   },
 });

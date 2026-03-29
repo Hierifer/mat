@@ -46,10 +46,11 @@
     "macOS": {
       "minimumSystemVersion": "10.15",
       "exceptionDomain": "",
-      "entitlements": null,
+      "entitlements": "entitlements.plist",
       "frameworks": [],
       "providerShortName": null,
-      "signingIdentity": "-"
+      "signingIdentity": "-",
+      "info": "Info.plist"
     },
     "windows": {
       "webviewInstallMode": {

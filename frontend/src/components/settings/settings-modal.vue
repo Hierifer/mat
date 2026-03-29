@@ -96,7 +96,7 @@ const themeColors = computed(() => {
     }
   }
 })
-
+</script>
 
 <template>
   <div class="settings-overlay" :style="{ background: themeColors.overlay }" @click.self="store.toggleSettings">
@@ -255,6 +255,53 @@ const themeColors = computed(() => {
                 {{ $t('settings.enableCommandNotificationsDesc') }}
               </p>
             </div>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.tmux.title', 'tmux 集成') }}</label>
+            <div class="setting-row">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  :checked="store.tmuxEnabled"
+                  @change="store.toggleTmux(!store.tmuxEnabled)"
+                  class="checkbox-input"
+                />
+                <span class="checkbox-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.tmux.enable') }}</span>
+              </label>
+              <p class="setting-description" :style="{ color: themeColors.descColor }">
+                {{ $t('settings.tmux.enableDesc') }}
+              </p>
+            </div>
+
+            <div v-if="store.tmuxEnabled" class="setting-row" style="margin-top: 15px;">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  v-model="store.autoRestoreSessions"
+                  @change="store.saveSessionMapping()"
+                  class="checkbox-input"
+                />
+                <span class="checkbox-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.tmux.autoRestore') }}</span>
+              </label>
+              <p class="setting-description" :style="{ color: themeColors.descColor }">
+                {{ $t('settings.tmux.autoRestoreDesc', '重启应用时自动连接到之前的 tmux 会话') }}
+              </p>
+            </div>
+
+            <button
+              v-if="store.tmuxEnabled"
+              @click="store.toggleSessionManager()"
+              class="font-reset-btn"
+              :style="{
+                background: themeColors.buttonBg,
+                borderColor: themeColors.buttonBorder,
+                color: themeColors.inputColor,
+                marginTop: '15px'
+              }"
+            >
+              {{ $t('settings.tmux.manageSession', '管理 tmux 会话') }}
+            </button>
           </div>
         </div>
 

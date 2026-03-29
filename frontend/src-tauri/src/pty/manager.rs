@@ -7,11 +7,14 @@ use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
 use super::shell;
+use super::tmux::TmuxManager;
 
 pub struct PtySession {
     pub id: String,
     pub writer: Box<dyn Write + Send>,
     pub master: Arc<TokioMutex<Box<dyn MasterPty + Send>>>,
+    pub tmux_session_name: Option<String>,  // tmux session name if tmux is enabled
+    pub tmux_enabled: bool,                  // whether this session uses tmux
 }
 
 pub struct PtyManager {
@@ -27,7 +30,14 @@ impl PtyManager {
         }
     }
 
-    pub async fn spawn_shell(&mut self, cols: u16, rows: u16, app_handle: AppHandle) -> Result<String, String> {
+    pub async fn spawn_shell(
+        &mut self,
+        cols: u16,
+        rows: u16,
+        app_handle: AppHandle,
+        tmux_enabled: bool,
+        tmux_session_name: Option<String>,
+    ) -> Result<String, String> {
         let session_id = Uuid::now_v7().to_string();
 
         let pty_pair = self.pty_system
@@ -43,9 +53,32 @@ impl PtyManager {
         let shell_path = shell::get_default_shell();
         let mut cmd = CommandBuilder::new(&shell_path);
 
-        // Launch as a login shell to load user's profile and PATH
-        #[cfg(not(target_os = "windows"))]
-        cmd.arg("-l");
+        // Prepare tmux session name if tmux is enabled
+        let tmux_session = if tmux_enabled {
+            // Use provided name or generate a new one
+            let session_name = tmux_session_name.unwrap_or_else(|| TmuxManager::generate_session_name());
+
+            // Create tmux session if it doesn't exist
+            if !TmuxManager::session_exists(&session_name).unwrap_or(false) {
+                let shell_str = shell_path.to_str().ok_or("Invalid shell path")?;
+                TmuxManager::create_session(&session_name, shell_str, None)?;
+                log::info!("Created new tmux session: {}", session_name);
+            } else {
+                log::info!("Attaching to existing tmux session: {}", session_name);
+            }
+
+            // Set command to attach to tmux session instead of direct shell
+            cmd = CommandBuilder::new("tmux");
+            cmd.args(&["attach-session", "-t", &session_name]);
+
+            Some(session_name)
+        } else {
+            // Standard non-tmux mode
+            #[cfg(not(target_os = "windows"))]
+            cmd.arg("-l");
+
+            None
+        };
 
         cmd.env("TERM", "xterm-256color");
 
@@ -95,10 +128,23 @@ impl PtyManager {
             id: session_id.clone(),
             writer: Box::new(writer),
             master: master_for_session,
+            tmux_session_name: tmux_session.clone(),
+            tmux_enabled,
         };
 
         self.sessions.insert(session_id.clone(), session);
-        log::info!("PTY session created: {} (total sessions: {})", session_id, self.sessions.len());
+
+        if tmux_enabled {
+            log::info!(
+                "PTY session created with tmux: {} -> {} (total sessions: {})",
+                session_id,
+                tmux_session.unwrap_or_default(),
+                self.sessions.len()
+            );
+        } else {
+            log::info!("PTY session created: {} (total sessions: {})", session_id, self.sessions.len());
+        }
+
         Ok(session_id)
     }
 

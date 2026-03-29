@@ -1,4 +1,5 @@
 mod pty;
+mod settings;
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -138,6 +139,19 @@ pub fn run() {
             pty::commands::pty_resize,
             pty::commands::pty_close,
             pty::commands::pty_list_sessions,
+            // tmux commands
+            pty::commands::tmux_list_sessions,
+            pty::commands::tmux_attach_session,
+            pty::commands::tmux_kill_session,
+            pty::commands::tmux_rename_session,
+            pty::commands::tmux_get_history,
+            pty::commands::tmux_search_history,
+            pty::commands::tmux_export_history,
+            pty::commands::tmux_check_installed,
+            pty::commands::tmux_get_version,
+            // settings commands
+            pty::commands::settings_get,
+            pty::commands::settings_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

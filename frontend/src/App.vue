@@ -13,6 +13,7 @@ import SettingsModal from '@/components/settings/settings-modal.vue'
 import AboutModal from '@/components/settings/about-modal.vue'
 import UpdateDialog from '@/components/updater/update-dialog.vue'
 import SpeechIndicator from '@/components/speech/speech-indicator.vue'
+import SessionManager from '@/components/terminal/session-manager.vue'
 
 const terminalStore = useTerminalStore()
 const { updateInfo, checkForUpdates } = useUpdater()
@@ -129,9 +130,20 @@ const handleSpeechShortcut = (e: KeyboardEvent) => {
 }
 
 onMounted(async () => {
-  console.log('App mounted, creating initial tab...')
+  console.log('App mounted, initializing...')
+
+  // Initialize tmux first
+  await terminalStore.initTmux()
+
+  // Create initial tab or restore sessions
   try {
-    await terminalStore.createTab()
+    if (terminalStore.tmuxEnabled && terminalStore.autoRestoreSessions) {
+      console.log('Restoring tmux sessions...')
+      await terminalStore.restoreSessions()
+    } else {
+      console.log('Creating initial tab...')
+      await terminalStore.createTab()
+    }
     console.log('Tab created successfully')
     console.log('Active tab:', terminalStore.activeTab)
     console.log('Tabs array:', terminalStore.tabs)
@@ -239,6 +251,9 @@ onUnmounted(() => {
 
     <!-- About Modal -->
     <about-modal v-if="terminalStore.isAboutOpen" />
+
+    <!-- Session Manager -->
+    <session-manager v-if="terminalStore.isSessionManagerOpen" />
 
     <!-- Update Dialog -->
     <update-dialog
