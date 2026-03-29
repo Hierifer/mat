@@ -49,7 +49,7 @@
       "entitlements": null,
       "frameworks": [],
       "providerShortName": null,
-      "signingIdentity": null
+      "signingIdentity": "-"
     },
     "windows": {
       "webviewInstallMode": {
