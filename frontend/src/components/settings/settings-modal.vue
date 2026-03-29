@@ -60,6 +60,9 @@ const themeColors = computed(() => {
       buttonBorder: '#cccccc',
       buttonHoverBg: '#e8e8e8',
       sliderBg: '#e0e0e0',
+      accentColor: '#0078d4',
+      themePreviewBorder: 'rgba(0, 0, 0, 0.15)',
+      categoryActiveBorder: '#0078d4',
     }
   } else {
     return {
@@ -93,13 +96,19 @@ const themeColors = computed(() => {
       buttonBorder: '#555',
       buttonHoverBg: '#454545',
       sliderBg: '#3c3c3c',
+      accentColor: '#0078d4',
+      themePreviewBorder: 'rgba(255, 255, 255, 0.15)',
+      categoryActiveBorder: '#0078d4',
     }
   }
 })
 </script>
 
 <template>
-  <div class="settings-overlay" :style="{ background: themeColors.overlay }" @click.self="store.toggleSettings">
+  <div class="settings-overlay" :style="{
+    background: themeColors.overlay,
+    '--accent-color': themeColors.accentColor
+  }" @click.self="store.toggleSettings">
     <div class="settings-modal" :style="{
       background: themeColors.modalBg,
       borderColor: themeColors.modalBorder,
@@ -118,7 +127,8 @@ const themeColors = computed(() => {
             :class="{ active: activeCategory === category }"
             :style="{
               color: activeCategory === category ? themeColors.categoryActiveColor : themeColors.categoryColor,
-              background: activeCategory === category ? themeColors.categoryActiveBg : 'transparent'
+              background: activeCategory === category ? themeColors.categoryActiveBg : 'transparent',
+              borderLeftColor: activeCategory === category ? themeColors.categoryActiveBorder : 'transparent'
             }"
             @click="activeCategory = category"
           >
@@ -126,7 +136,7 @@ const themeColors = computed(() => {
           </li>
         </ul>
       </div>
-      <div class="settings-content">
+      <div class="settings-content" :style="{ background: themeColors.modalBg }">
         <div class="settings-header" :style="{ borderBottomColor: themeColors.headerBorder }">
             <h3 :style="{ color: themeColors.headerColor }">{{ $t(`settings.${activeCategory.toLowerCase()}`) }}</h3>
             <button class="close-btn" :style="{ color: themeColors.closeBtnColor }" @click="store.toggleSettings">✕</button>
@@ -182,12 +192,15 @@ const themeColors = computed(() => {
                 :class="{ active: store.currentThemeName === themeName }"
                 :style="{
                   background: themeColors.themeCardBg,
-                  borderColor: store.currentThemeName === themeName ? '#0078d4' : themeColors.themeCardBorder
+                  borderColor: store.currentThemeName === themeName ? themeColors.accentColor : themeColors.themeCardBorder
                 }"
                 @click="store.setTheme(themeName)"
               >
                 <!-- Use the colors from the specific theme, not the current one -->
-                <div class="theme-preview" :style="{ backgroundColor: themes[themeName].background }">
+                <div class="theme-preview" :style="{
+                  backgroundColor: themes[themeName].background,
+                  borderColor: themeColors.themePreviewBorder
+                }">
                    <div class="color-swatch" :style="{ backgroundColor: themes[themeName].red }"></div>
                    <div class="color-swatch" :style="{ backgroundColor: themes[themeName].green }"></div>
                    <div class="color-swatch" :style="{ backgroundColor: themes[themeName].blue }"></div>
@@ -405,7 +418,7 @@ const themeColors = computed(() => {
 }
 
 .category-item.active {
-  border-left: 3px solid #0078d4;
+  border-left: 3px solid;
 }
 
 .settings-content {
@@ -483,14 +496,14 @@ const themeColors = computed(() => {
 }
 
 .theme-card.active {
-  box-shadow: 0 0 0 2px #0078d4;
+  box-shadow: 0 0 0 2px var(--accent-color);
 }
 
 .theme-preview {
   height: 60px;
   border-radius: 4px;
   margin-bottom: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  border: 1px solid;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -525,7 +538,7 @@ const themeColors = computed(() => {
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: #0078d4;
+  accent-color: var(--accent-color);
 }
 
 .checkbox-text {
@@ -558,7 +571,7 @@ const themeColors = computed(() => {
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: #0078d4;
+  accent-color: var(--accent-color);
 }
 
 .radio-text {
@@ -583,7 +596,7 @@ const themeColors = computed(() => {
 }
 
 .select-input:focus {
-  border-color: #0078d4;
+  border-color: var(--accent-color);
 }
 
 .font-size-controls {
@@ -606,7 +619,7 @@ const themeColors = computed(() => {
 
 .font-btn:hover {
   opacity: 0.9;
-  border-color: #0078d4;
+  border-color: var(--accent-color);
 }
 
 .font-btn:active {
@@ -633,7 +646,7 @@ const themeColors = computed(() => {
 
 .font-reset-btn:hover {
   opacity: 0.9;
-  border-color: #0078d4;
+  border-color: var(--accent-color);
 }
 
 .font-slider {
@@ -642,7 +655,7 @@ const themeColors = computed(() => {
   border-radius: 2px;
   outline: none;
   cursor: pointer;
-  accent-color: #0078d4;
+  accent-color: var(--accent-color);
   transition: background 0.3s;
 }
 </style>

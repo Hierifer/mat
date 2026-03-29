@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, inject, type Ref } from 'vue'
+import { ref, inject, computed, type Ref } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { usePlatform } from '@/composables/use-platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -12,6 +12,11 @@ const speechRecognition = inject<{
   toggleSpeech: () => void
 }>('speechRecognition')
 const { isMacOS, isWindows, isLinux } = usePlatform()
+
+// Determine if current theme is light
+const isLightTheme = computed(() => {
+  return store.currentThemeName.includes('Light')
+})
 
 const handleMinimize = async () => {
   try {
@@ -90,7 +95,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 </script>
 
 <template>
-  <div class="tab-bar">
+  <div class="tab-bar" :class="{ 'light-theme': isLightTheme }">
     <!-- macOS style window controls (left side) -->
     <div v-if="isMacOS()" class="window-controls macos">
       <button class="control-btn close" @click="handleClose" title="Close"></button>
@@ -192,6 +197,12 @@ const handleKeydown = (e: KeyboardEvent) => {
   user-select: none;
   gap: 12px;
   border-radius: 10px 10px 0 0;
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.tab-bar.light-theme {
+  background: #f3f3f3;
+  border-bottom: 1px solid #d4d4d4;
 }
 
 .window-controls {
@@ -365,14 +376,28 @@ const handleKeydown = (e: KeyboardEvent) => {
   position: relative;
 }
 
+.light-theme .tab {
+  background: #e8e8e8;
+}
+
 .tab:hover {
   background: #37373d;
+}
+
+.light-theme .tab:hover {
+  background: #d8d8d8;
 }
 
 .tab.active {
   background: #1e1e1e;
   border-color: #007acc;
   border-bottom-color: #1e1e1e;
+}
+
+.light-theme .tab.active {
+  background: #f3f3f3;
+  border-color: #007acc;
+  border-bottom-color: #f3f3f3;
 }
 
 .tab-number {
@@ -395,8 +420,16 @@ const handleKeydown = (e: KeyboardEvent) => {
   text-overflow: ellipsis;
 }
 
+.light-theme .tab-title {
+  color: #616161;
+}
+
 .tab.active .tab-title {
   color: #ffffff;
+}
+
+.light-theme .tab.active .tab-title {
+  color: #000000;
 }
 
 .tab-title-input {
@@ -453,10 +486,21 @@ const handleKeydown = (e: KeyboardEvent) => {
   app-region: no-drag;
 }
 
+.light-theme .new-tab-btn {
+  background: #e8e8e8;
+  color: #616161;
+}
+
 .new-tab-btn:hover {
   background: #37373d;
   border-color: #007acc;
   color: #ffffff;
+}
+
+.light-theme .new-tab-btn:hover {
+  background: #d8d8d8;
+  border-color: #007acc;
+  color: #000000;
 }
 
 .new-tab-btn:active {
@@ -480,10 +524,21 @@ const handleKeydown = (e: KeyboardEvent) => {
   position: relative;
 }
 
+.light-theme .speech-btn {
+  background: #e8e8e8;
+  color: #616161;
+}
+
 .speech-btn:hover {
   background: #37373d;
   border-color: #007acc;
   color: #ffffff;
+}
+
+.light-theme .speech-btn:hover {
+  background: #d8d8d8;
+  border-color: #007acc;
+  color: #000000;
 }
 
 .speech-btn:active {
@@ -535,10 +590,21 @@ const handleKeydown = (e: KeyboardEvent) => {
   app-region: no-drag;
 }
 
+.light-theme .settings-btn {
+  background: #e8e8e8;
+  color: #616161;
+}
+
 .settings-btn:hover {
   background: #37373d;
   border-color: #007acc;
   color: #ffffff;
+}
+
+.light-theme .settings-btn:hover {
+  background: #d8d8d8;
+  border-color: #007acc;
+  color: #000000;
 }
 
 .settings-btn:active {

@@ -1,5 +1,6 @@
 mod pty;
 mod settings;
+mod speech;
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -152,6 +153,11 @@ pub fn run() {
             // settings commands
             pty::commands::settings_get,
             pty::commands::settings_update,
+            // speech commands
+            speech::speech_check_availability,
+            speech::speech_start_recognition,
+            speech::speech_stop_recognition,
+            speech::speech_is_listening,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

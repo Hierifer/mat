@@ -35,3 +35,16 @@ tauri-plugin-updater = "2.10.0"
 # tmux integration
 regex = "1"
 dirs = "5"
+lazy_static = "1.4"
+
+# Speech recognition with Whisper (cross-platform)
+whisper-rs = "0.12"
+hound = "3.5"  # For audio file I/O
+cpal = "0.15"  # For microphone capture
+
+# macOS native speech recognition (only on macOS, deprecated in favor of Whisper)
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+cocoa = "0.25"
+core-foundation = "0.9"
+block = "0.1"

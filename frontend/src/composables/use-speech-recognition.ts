@@ -1,4 +1,6 @@
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -42,28 +44,56 @@ export function useSpeechRecognition() {
   const isSupported = ref(false)
   const error = ref<string | null>(null)
   const isMacOS = ref(false)
+  const useNativeAPI = ref(false)
 
   let recognition: SpeechRecognition | null = null
-  let hasTestedPermissions = false
+  let unlistenResult: UnlistenFn | null = null
+  let unlistenError: UnlistenFn | null = null
+
+  // Clean up event listeners on unmount
+  onUnmounted(() => {
+    if (unlistenResult) unlistenResult()
+    if (unlistenError) unlistenError()
+  })
 
   // Check if browser supports speech recognition
-  const checkSupport = () => {
+  const checkSupport = async () => {
     // Detect macOS
     isMacOS.value = navigator.platform.toLowerCase().includes('mac')
 
-    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-      // On macOS, Web Speech API exists but doesn't work in WKWebView
-      // We'll test permissions when user actually tries to use it
-      if (isMacOS.value) {
-        isSupported.value = false // Assume not supported on macOS until proven otherwise
-        console.warn('[Speech] Running on macOS - Web Speech API may not work in WKWebView')
-      } else {
-        isSupported.value = true
+    // @ts-ignore
+    if (window.__TAURI_INTERNALS__) {
+      // Running in Tauri, check native API availability (Whisper)
+      try {
+        const nativeAvailable = await invoke<boolean>('speech_check_availability')
+        if (nativeAvailable) {
+          // Use Whisper API (cross-platform)
+          useNativeAPI.value = true
+          isSupported.value = true
+          console.log('[Speech] Using Whisper Speech Recognition')
+          return true
+        }
+      } catch (e) {
+        console.warn('[Speech] Whisper API check failed:', e)
       }
-      return true
     }
+
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+      // On macOS with Tauri, Web Speech API doesn't work
+      if (isMacOS.value) {
+        isSupported.value = false
+        console.warn('[Speech] Running on macOS - Web Speech API not supported in WKWebView, native API not available')
+        return false
+      } else {
+        // Use Web Speech API on other platforms
+        isSupported.value = true
+        useNativeAPI.value = false
+        return true
+      }
+    }
+
     isSupported.value = false
-    error.value = 'Speech recognition is not supported in this browser'
+    error.value = 'Speech recognition is not supported on this platform'
     return false
   }
 
@@ -145,44 +175,108 @@ export function useSpeechRecognition() {
   }
 
   // Start listening
-  const start = () => {
-    if (!recognition) {
-      recognition = initRecognition()
-    }
+  const start = async () => {
+    console.log('[Speech] Start requested')
+    transcript.value = ''
+    interimTranscript.value = ''
+    error.value = null
 
-    if (!recognition) {
-      console.error('[Speech] Failed to initialize recognition')
-      return
-    }
+    if (useNativeAPI.value) {
+      // Use native API
+      try {
+        // Listen for speech results
+        if (!unlistenResult) {
+          unlistenResult = await listen('speech-result', (event: any) => {
+            const result = event.payload as { text: string; is_final: boolean }
+            console.log('[Speech] Result received:', result)
+            if (result.is_final) {
+              transcript.value += result.text
+              interimTranscript.value = ''
+            } else {
+              interimTranscript.value = result.text
+            }
+          })
+          console.log('[Speech] Result listener installed')
+        }
 
-    try {
-      transcript.value = ''
-      interimTranscript.value = ''
-      recognition.start()
-      console.log('[Speech] Starting recognition...')
-    } catch (err) {
-      console.error('[Speech] Failed to start:', err)
-      error.value = 'Failed to start speech recognition'
+        // Listen for speech errors
+        if (!unlistenError) {
+          unlistenError = await listen('speech-error', (event: any) => {
+            const err = event.payload as { error: string; message: string }
+            console.error('[Speech] Error event received:', err)
+            error.value = err.message
+            isListening.value = false
+          })
+          console.log('[Speech] Error listener installed')
+        }
+
+        // @ts-ignore
+        // Whisper uses 2-letter language codes: zh, en, ja, etc.
+        await invoke('speech_start_recognition', {
+          language: 'zh'
+        })
+
+        isListening.value = true
+        console.log('[Speech] Native recognition started, isListening:', isListening.value)
+      } catch (err) {
+        console.error('[Speech] Failed to start native recognition:', err)
+        error.value = String(err)
+        isListening.value = false
+      }
+    } else {
+      // Use Web Speech API
+      if (!recognition) {
+        recognition = initRecognition()
+      }
+
+      if (!recognition) {
+        console.error('[Speech] Failed to initialize recognition')
+        return
+      }
+
+      try {
+        recognition.start()
+        console.log('[Speech] Starting Web Speech API recognition...')
+      } catch (err) {
+        console.error('[Speech] Failed to start:', err)
+        error.value = 'Failed to start speech recognition'
+      }
     }
   }
 
   // Stop listening
-  const stop = () => {
-    if (recognition && isListening.value) {
-      recognition.stop()
-      console.log('[Speech] Stopping recognition...')
+  const stop = async () => {
+    console.log('[Speech] Stop requested, isListening:', isListening.value)
+
+    if (useNativeAPI.value) {
+      try {
+        // @ts-ignore
+        await invoke('speech_stop_recognition')
+        console.log('[Speech] Native recognition stopped')
+      } catch (err) {
+        console.error('[Speech] Failed to stop native recognition:', err)
+      }
+    } else {
+      if (recognition && isListening.value) {
+        recognition.stop()
+        console.log('[Speech] Web Speech API stopped')
+      }
     }
-    // Clear error when manually stopping
+
+    // Clear state immediately
     error.value = null
     isListening.value = false
+    console.log('[Speech] State cleared, isListening now:', isListening.value)
   }
 
   // Toggle listening
-  const toggle = () => {
+  const toggle = async () => {
     if (isListening.value) {
-      stop()
+      await stop()
     } else {
-      start()
+      // Check support first
+      await checkSupport()
+      await start()
     }
   }
 

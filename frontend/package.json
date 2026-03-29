@@ -10,9 +10,9 @@
     "typecheck": "vue-tsc -b --noEmit",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "build:mac": "tauri build --target universal-apple-darwin",
+    "tauri:dev": "WHISPER_DONT_GENERATE_BINDINGS=1 WHISPER_NO_AVX=1 WHISPER_NO_AVX2=1 WHISPER_NO_FMA=1 WHISPER_NO_F16C=1 tauri dev",
+    "tauri:build": "WHISPER_DONT_GENERATE_BINDINGS=1 WHISPER_NO_AVX=1 WHISPER_NO_AVX2=1 WHISPER_NO_FMA=1 WHISPER_NO_F16C=1 tauri build",
+    "build:mac": "WHISPER_DONT_GENERATE_BINDINGS=1 WHISPER_NO_AVX=1 WHISPER_NO_AVX2=1 WHISPER_NO_FMA=1 WHISPER_NO_F16C=1 tauri build --target universal-apple-darwin",
     "build:windows": "tauri build --target x86_64-pc-windows-msvc",
     "build:linux": "tauri build --target x86_64-unknown-linux-gnu"
   },

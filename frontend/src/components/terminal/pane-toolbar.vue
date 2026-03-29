@@ -13,6 +13,11 @@ const store = useTerminalStore()
 const { write } = usePtySession(props.sessionId)
 
 const isActive = computed(() => store.activePaneId === props.paneId)
+
+// Determine if current theme is light
+const isLightTheme = computed(() => {
+  return store.currentThemeName.includes('Light')
+})
 const isEditing = ref(false)
 const editingCwd = ref(props.cwd || '~')
 const cwdInput = ref<HTMLInputElement | null>(null)
@@ -76,7 +81,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 </script>
 
 <template>
-  <div class="pane-toolbar" :class="{ active: isActive }" @click="handlePaneClick">
+  <div class="pane-toolbar" :class="{ active: isActive, 'light-theme': isLightTheme }" @click="handlePaneClick">
     <div class="toolbar-title">
       <input
         v-if="isEditing"
@@ -135,8 +140,20 @@ const handleKeydown = (e: KeyboardEvent) => {
   transition: all 0.15s;
 }
 
+.pane-toolbar.light-theme {
+  background: #e8e8e8;
+  border-bottom: 1px solid #d4d4d4;
+  color: #616161;
+}
+
 .pane-toolbar.active {
   background: #3d3d3d;
+  border-top-color: #007acc;
+  border-bottom-color: #007acc;
+}
+
+.pane-toolbar.light-theme.active {
+  background: #d8d8d8;
   border-top-color: #007acc;
   border-bottom-color: #007acc;
 }
@@ -194,13 +211,26 @@ const handleKeydown = (e: KeyboardEvent) => {
   transition: all 0.15s;
 }
 
+.light-theme .toolbar-btn {
+  color: #616161;
+}
+
 .toolbar-btn:hover {
   background: #444;
   color: white;
 }
 
+.light-theme .toolbar-btn:hover {
+  background: #d0d0d0;
+  color: #000;
+}
+
 .toolbar-btn:active {
   background: #555;
+}
+
+.light-theme .toolbar-btn:active {
+  background: #c0c0c0;
 }
 
 .close-btn:hover {
