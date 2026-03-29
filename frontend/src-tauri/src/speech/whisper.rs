@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Sender, Receiver};
 use tauri::Emitter;
 use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
-use hound;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,11 +22,22 @@ lazy_static::lazy_static! {
     static ref RECOGNITION_STATE: Arc<Mutex<RecognitionState>> = Arc::new(Mutex::new(RecognitionState::default()));
 }
 
-#[derive(Default)]
 struct RecognitionState {
     is_listening: bool,
     audio_buffer: Vec<f32>,
     whisper_ctx: Option<Arc<WhisperContext>>,
+    audio_tx: Option<Sender<Vec<f32>>>,
+}
+
+impl Default for RecognitionState {
+    fn default() -> Self {
+        Self {
+            is_listening: false,
+            audio_buffer: Vec::new(),
+            whisper_ctx: None,
+            audio_tx: None,
+        }
+    }
 }
 
 /// Check if Whisper is available (model file exists)
@@ -74,12 +85,23 @@ pub async fn speech_start_recognition(
     state.is_listening = true;
     state.audio_buffer.clear();
 
-    // Start audio recording in background
+    // Create channel for audio processing
+    let (tx, rx) = channel::<Vec<f32>>();
+    state.audio_tx = Some(tx.clone());
+
+    // Start audio processing thread
     let app_clone = app.clone();
     let lang = language.unwrap_or_else(|| "zh".to_string());
+    let lang_clone = lang.clone();
+    let ctx = state.whisper_ctx.as_ref().unwrap().clone();
 
-    tokio::task::spawn_blocking(move || {
-        if let Err(e) = capture_audio(app_clone, lang) {
+    std::thread::spawn(move || {
+        process_audio_stream(rx, ctx, app_clone, lang_clone);
+    });
+
+    // Start audio recording in background
+    std::thread::spawn(move || {
+        if let Err(e) = capture_audio(tx) {
             println!("[Whisper] Audio capture error: {}", e);
         }
     });
@@ -97,27 +119,18 @@ pub async fn speech_stop_recognition(app: tauri::AppHandle) -> Result<(), String
     state.is_listening = false;
 
     // Process any remaining audio
-    if !state.audio_buffer.is_empty() && state.whisper_ctx.is_some() {
-        let audio_data = state.audio_buffer.clone();
-        let ctx = state.whisper_ctx.as_ref().unwrap().clone();
-
-        drop(state);
-
-        // Transcribe final audio
-        tokio::task::spawn_blocking(move || {
-            if let Ok(text) = transcribe_audio(&ctx, &audio_data, "zh") {
-                if !text.trim().is_empty() {
-                    let _ = app.emit("speech-result", SpeechRecognitionResult {
-                        text,
-                        is_final: true,
-                    });
-                }
-            }
-        });
-    } else {
-        drop(state);
+    if !state.audio_buffer.is_empty() && state.audio_buffer.len() > 8000 {
+        // Only process if we have at least 0.5 seconds of audio
+        if let Some(tx) = state.audio_tx.as_ref() {
+            let audio_data = state.audio_buffer.clone();
+            let _ = tx.send(audio_data);
+        }
     }
 
+    state.audio_buffer.clear();
+    state.audio_tx = None; // Drop the sender to signal processing thread to stop
+
+    drop(state);
     Ok(())
 }
 
@@ -148,8 +161,32 @@ fn get_model_path() -> PathBuf {
     PathBuf::from("models/ggml-base.bin")
 }
 
+// Process audio stream from channel
+fn process_audio_stream(
+    rx: Receiver<Vec<f32>>,
+    ctx: Arc<WhisperContext>,
+    app: tauri::AppHandle,
+    language: String,
+) {
+    println!("[Whisper] Audio processing thread started");
+
+    while let Ok(audio_chunk) = rx.recv() {
+        if let Ok(text) = transcribe_audio(&ctx, &audio_chunk, &language) {
+            if !text.trim().is_empty() {
+                println!("[Whisper] Transcribed: {}", text);
+                let _ = app.emit("speech-result", SpeechRecognitionResult {
+                    text,
+                    is_final: false,
+                });
+            }
+        }
+    }
+
+    println!("[Whisper] Audio processing thread stopped");
+}
+
 // Capture audio from microphone
-fn capture_audio(app: tauri::AppHandle, language: String) -> Result<(), String> {
+fn capture_audio(audio_tx: Sender<Vec<f32>>) -> Result<(), String> {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
     println!("[Whisper] Initializing audio capture...");
@@ -171,25 +208,27 @@ fn capture_audio(app: tauri::AppHandle, language: String) -> Result<(), String> 
     // Build audio stream
     let err_fn = |err| eprintln!("[Whisper] Audio stream error: {}", err);
 
+    let audio_tx_clone = audio_tx.clone();
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => {
             device.build_input_stream(
                 &config.into(),
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    process_audio_chunk(data, channels, sample_rate, &app, &language);
+                    process_audio_chunk(data, channels, sample_rate, &audio_tx_clone);
                 },
                 err_fn,
                 None,
             )
         }
         cpal::SampleFormat::I16 => {
+            let audio_tx_clone2 = audio_tx.clone();
             device.build_input_stream(
                 &config.into(),
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
                     let float_data: Vec<f32> = data.iter()
                         .map(|&s| s as f32 / i16::MAX as f32)
                         .collect();
-                    process_audio_chunk(&float_data, channels, sample_rate, &app, &language);
+                    process_audio_chunk(&float_data, channels, sample_rate, &audio_tx_clone2);
                 },
                 err_fn,
                 None,
@@ -214,7 +253,7 @@ fn capture_audio(app: tauri::AppHandle, language: String) -> Result<(), String> 
 }
 
 // Process audio chunk
-fn process_audio_chunk(data: &[f32], channels: usize, sample_rate: u32, app: &tauri::AppHandle, language: &str) {
+fn process_audio_chunk(data: &[f32], channels: usize, sample_rate: u32, audio_tx: &Sender<Vec<f32>>) {
     let mut state = RECOGNITION_STATE.lock().unwrap();
 
     if !state.is_listening {
@@ -241,30 +280,8 @@ fn process_audio_chunk(data: &[f32], channels: usize, sample_rate: u32, app: &ta
     if state.audio_buffer.len() >= 48000 {
         let audio_chunk = state.audio_buffer.drain(..48000).collect::<Vec<f32>>();
 
-        if let Some(ctx) = state.whisper_ctx.as_ref() {
-            let ctx_clone = ctx.clone();
-            let app_clone = app.clone();
-            let lang = language.to_string();
-
-            drop(state);
-
-            // Transcribe in background
-            tokio::task::spawn_blocking(move || {
-                if let Ok(text) = transcribe_audio(&ctx_clone, &audio_chunk, &lang) {
-                    if !text.trim().is_empty() {
-                        println!("[Whisper] Transcribed: {}", text);
-                        let _ = app_clone.emit("speech-result", SpeechRecognitionResult {
-                            text,
-                            is_final: false,
-                        });
-                    }
-                }
-            });
-        } else {
-            drop(state);
-        }
-    } else {
-        drop(state);
+        // Send to processing thread
+        let _ = audio_tx.send(audio_chunk);
     }
 }
 
