@@ -3,7 +3,7 @@ import { useTerminalStore } from '@/stores/terminal-store'
 import { themes } from '@/settings/themes'
 import { availableLocales } from '@/i18n'
 import { useI18n } from 'vue-i18n'
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 
 const store = useTerminalStore()
 const { locale, t } = useI18n()
@@ -20,19 +20,106 @@ const changeLocale = (newLocale: string) => {
   store.setLocale(newLocale)
   locale.value = newLocale
 }
-</script>
+
+// Determine if current theme is light
+const isLightTheme = computed(() => {
+  return store.currentThemeName.includes('Light')
+})
+
+// Dynamic colors based on theme
+const themeColors = computed(() => {
+  if (isLightTheme.value) {
+    return {
+      overlay: 'rgba(0, 0, 0, 0.3)',
+      modalBg: '#ffffff',
+      modalBorder: '#e0e0e0',
+      sidebarBg: '#f5f5f5',
+      sidebarBorder: '#e0e0e0',
+      titleColor: '#666666',
+      categoryColor: '#333333',
+      categoryHoverBg: '#eeeeee',
+      categoryActiveBg: '#e3e3e3',
+      categoryActiveColor: '#000000',
+      headerBorder: '#e0e0e0',
+      headerColor: '#000000',
+      closeBtnColor: '#666666',
+      closeBtnHoverColor: '#000000',
+      labelColor: '#333333',
+      inputBg: '#f8f8f8',
+      inputBorder: '#cccccc',
+      inputBorderHover: '#999999',
+      inputColor: '#333333',
+      checkboxText: '#333333',
+      descColor: '#666666',
+      themeCardBg: '#f8f8f8',
+      themeCardHoverBg: '#eeeeee',
+      themeCardActiveBg: '#e3e3e3',
+      themeCardBorder: '#e0e0e0',
+      themeNameColor: '#333333',
+      buttonBg: '#f0f0f0',
+      buttonBorder: '#cccccc',
+      buttonHoverBg: '#e8e8e8',
+      sliderBg: '#e0e0e0',
+    }
+  } else {
+    return {
+      overlay: 'rgba(0, 0, 0, 0.5)',
+      modalBg: '#252526',
+      modalBorder: '#3e3e42',
+      sidebarBg: '#1e1e1e',
+      sidebarBorder: '#3e3e42',
+      titleColor: '#bbbbbb',
+      categoryColor: '#cccccc',
+      categoryHoverBg: '#2a2d2e',
+      categoryActiveBg: '#37373d',
+      categoryActiveColor: '#ffffff',
+      headerBorder: '#3e3e42',
+      headerColor: '#ffffff',
+      closeBtnColor: '#ccc',
+      closeBtnHoverColor: '#fff',
+      labelColor: '#e7e7e7',
+      inputBg: '#3c3c3c',
+      inputBorder: '#555',
+      inputBorderHover: '#777',
+      inputColor: '#e7e7e7',
+      checkboxText: '#e7e7e7',
+      descColor: '#999',
+      themeCardBg: '#2d2d30',
+      themeCardHoverBg: '#3e3e42',
+      themeCardActiveBg: '#37373d',
+      themeCardBorder: '#444',
+      themeNameColor: '#cccccc',
+      buttonBg: '#3c3c3c',
+      buttonBorder: '#555',
+      buttonHoverBg: '#454545',
+      sliderBg: '#3c3c3c',
+    }
+  }
+})
+
 
 <template>
-  <div class="settings-overlay" @click.self="store.toggleSettings">
-    <div class="settings-modal">
-      <div class="settings-sidebar">
-        <h2 class="settings-title">{{ $t('settings.title') }}</h2>
+  <div class="settings-overlay" :style="{ background: themeColors.overlay }" @click.self="store.toggleSettings">
+    <div class="settings-modal" :style="{
+      background: themeColors.modalBg,
+      borderColor: themeColors.modalBorder,
+      color: themeColors.headerColor
+    }">
+      <div class="settings-sidebar" :style="{
+        background: themeColors.sidebarBg,
+        borderRightColor: themeColors.sidebarBorder
+      }">
+        <h2 class="settings-title" :style="{ color: themeColors.titleColor }">{{ $t('settings.title') }}</h2>
         <ul class="settings-categories">
           <li
             v-for="category in categories"
             :key="category"
             class="category-item"
             :class="{ active: activeCategory === category }"
+            :style="{
+              color: activeCategory === category ? themeColors.categoryActiveColor : themeColors.categoryColor,
+              background: activeCategory === category ? themeColors.categoryActiveBg : 'transparent'
+            }"
             @click="activeCategory = category"
           >
             {{ $t(`settings.${category.toLowerCase()}`) }}
@@ -40,14 +127,14 @@ const changeLocale = (newLocale: string) => {
         </ul>
       </div>
       <div class="settings-content">
-        <div class="settings-header">
-            <h3>{{ $t(`settings.${activeCategory.toLowerCase()}`) }}</h3>
-            <button class="close-btn" @click="store.toggleSettings">✕</button>
+        <div class="settings-header" :style="{ borderBottomColor: themeColors.headerBorder }">
+            <h3 :style="{ color: themeColors.headerColor }">{{ $t(`settings.${activeCategory.toLowerCase()}`) }}</h3>
+            <button class="close-btn" :style="{ color: themeColors.closeBtnColor }" @click="store.toggleSettings">✕</button>
         </div>
         
         <div v-if="activeCategory === 'Appearance'" class="settings-section">
           <div class="setting-item">
-            <label class="setting-label">{{ $t('settings.themeMode') }}</label>
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.themeMode') }}</label>
             <div class="radio-group">
               <label class="radio-label">
                 <input
@@ -58,7 +145,7 @@ const changeLocale = (newLocale: string) => {
                   @change="store.setThemeMode('auto')"
                   class="radio-input"
                 />
-                <span class="radio-text">{{ $t('settings.themeModeAuto') }}</span>
+                <span class="radio-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.themeModeAuto') }}</span>
               </label>
               <label class="radio-label">
                 <input
@@ -69,7 +156,7 @@ const changeLocale = (newLocale: string) => {
                   @change="store.setThemeMode('light')"
                   class="radio-input"
                 />
-                <span class="radio-text">{{ $t('settings.themeModeLight') }}</span>
+                <span class="radio-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.themeModeLight') }}</span>
               </label>
               <label class="radio-label">
                 <input
@@ -80,19 +167,23 @@ const changeLocale = (newLocale: string) => {
                   @change="store.setThemeMode('dark')"
                   class="radio-input"
                 />
-                <span class="radio-text">{{ $t('settings.themeModeDark') }}</span>
+                <span class="radio-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.themeModeDark') }}</span>
               </label>
             </div>
           </div>
 
           <div class="setting-item">
-            <label class="setting-label">{{ $t('settings.colorTheme') }}</label>
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.colorTheme') }}</label>
             <div class="theme-grid">
               <div
                 v-for="themeName in store.availableThemes"
                 :key="themeName"
                 class="theme-card"
                 :class="{ active: store.currentThemeName === themeName }"
+                :style="{
+                  background: themeColors.themeCardBg,
+                  borderColor: store.currentThemeName === themeName ? '#0078d4' : themeColors.themeCardBorder
+                }"
                 @click="store.setTheme(themeName)"
               >
                 <!-- Use the colors from the specific theme, not the current one -->
@@ -101,13 +192,13 @@ const changeLocale = (newLocale: string) => {
                    <div class="color-swatch" :style="{ backgroundColor: themes[themeName].green }"></div>
                    <div class="color-swatch" :style="{ backgroundColor: themes[themeName].blue }"></div>
                 </div>
-                <span class="theme-name">{{ themeName }}</span>
+                <span class="theme-name" :style="{ color: themeColors.themeNameColor }">{{ themeName }}</span>
               </div>
             </div>
           </div>
 
           <div class="setting-item">
-            <label class="setting-label">{{ $t('settings.windowAppearance') }}</label>
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.windowAppearance') }}</label>
             <div class="setting-row">
               <label class="checkbox-label">
                 <input
@@ -116,9 +207,9 @@ const changeLocale = (newLocale: string) => {
                   @change="store.toggleDimInactivePanes"
                   class="checkbox-input"
                 />
-                <span class="checkbox-text">{{ $t('settings.dimInactivePanes') }}</span>
+                <span class="checkbox-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.dimInactivePanes') }}</span>
               </label>
-              <p class="setting-description">
+              <p class="setting-description" :style="{ color: themeColors.descColor }">
                 {{ $t('settings.dimInactivePanesDesc') }}
               </p>
             </div>
@@ -127,11 +218,16 @@ const changeLocale = (newLocale: string) => {
 
         <div v-if="activeCategory === 'General'" class="settings-section">
           <div class="setting-item">
-            <label class="setting-label">{{ $t('settings.language') }}</label>
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.language') }}</label>
             <select
               v-model="store.locale"
               @change="changeLocale(store.locale)"
               class="select-input"
+              :style="{
+                background: themeColors.inputBg,
+                borderColor: themeColors.inputBorder,
+                color: themeColors.inputColor
+              }"
             >
               <option
                 v-for="loc in availableLocales"
@@ -144,7 +240,7 @@ const changeLocale = (newLocale: string) => {
           </div>
 
           <div class="setting-item">
-            <label class="setting-label">{{ $t('settings.notifications') }}</label>
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.notifications') }}</label>
             <div class="setting-row">
               <label class="checkbox-label">
                 <input
@@ -153,9 +249,9 @@ const changeLocale = (newLocale: string) => {
                   @change="store.toggleCommandNotifications"
                   class="checkbox-input"
                 />
-                <span class="checkbox-text">{{ $t('settings.enableCommandNotifications') }}</span>
+                <span class="checkbox-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.enableCommandNotifications') }}</span>
               </label>
-              <p class="setting-description">
+              <p class="setting-description" :style="{ color: themeColors.descColor }">
                 {{ $t('settings.enableCommandNotificationsDesc') }}
               </p>
             </div>
@@ -164,15 +260,27 @@ const changeLocale = (newLocale: string) => {
 
         <div v-if="activeCategory === 'View'" class="settings-section">
           <div class="setting-item">
-            <label class="setting-label">{{ $t('settings.fontSize') }}</label>
-            <p class="setting-description" style="padding-left: 0; margin-bottom: 15px;">
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.fontSize') }}</label>
+            <p class="setting-description" :style="{ color: themeColors.descColor, paddingLeft: 0, marginBottom: '15px' }">
               {{ $t('settings.fontSizeDesc') }}
             </p>
             <div class="font-size-controls">
-              <button @click="store.decreaseFontSize()" class="font-btn">-</button>
-              <span class="font-size-value">{{ store.fontSize }}px</span>
-              <button @click="store.increaseFontSize()" class="font-btn">+</button>
-              <button @click="store.resetFontSize()" class="font-reset-btn">Reset</button>
+              <button @click="store.decreaseFontSize()" class="font-btn" :style="{
+                background: themeColors.buttonBg,
+                borderColor: themeColors.buttonBorder,
+                color: themeColors.inputColor
+              }">-</button>
+              <span class="font-size-value" :style="{ color: themeColors.labelColor }">{{ store.fontSize }}px</span>
+              <button @click="store.increaseFontSize()" class="font-btn" :style="{
+                background: themeColors.buttonBg,
+                borderColor: themeColors.buttonBorder,
+                color: themeColors.inputColor
+              }">+</button>
+              <button @click="store.resetFontSize()" class="font-reset-btn" :style="{
+                background: themeColors.buttonBg,
+                borderColor: themeColors.buttonBorder,
+                color: themeColors.inputColor
+              }">Reset</button>
             </div>
             <input
               type="range"
@@ -181,6 +289,7 @@ const changeLocale = (newLocale: string) => {
               :value="store.fontSize"
               @input="store.setFontSize(Number(($event.target as HTMLInputElement).value))"
               class="font-slider"
+              :style="{ background: themeColors.sliderBg }"
             />
           </div>
         </div>
@@ -196,30 +305,30 @@ const changeLocale = (newLocale: string) => {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
   backdrop-filter: blur(2px);
+  transition: background 0.3s;
 }
 
 .settings-modal {
   width: 800px;
   height: 600px;
-  background: #252526;
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   display: flex;
   overflow: hidden;
-  border: 1px solid #3e3e42;
+  border: 1px solid;
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
 }
 
 .settings-sidebar {
   width: 200px;
-  background: #1e1e1e;
-  border-right: 1px solid #3e3e42;
+  border-right: 1px solid;
   padding: 20px 0;
+  transition: background 0.3s, border-color 0.3s;
 }
 
 .settings-title {
@@ -227,8 +336,8 @@ const changeLocale = (newLocale: string) => {
   margin-bottom: 20px;
   font-size: 14px;
   font-weight: 600;
-  color: #bbbbbb;
   text-transform: uppercase;
+  transition: color 0.3s;
 }
 
 .settings-categories {
@@ -240,25 +349,22 @@ const changeLocale = (newLocale: string) => {
 .category-item {
   padding: 10px 20px;
   font-size: 14px;
-  color: #cccccc;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .category-item:hover {
-  background: #2a2d2e;
+  opacity: 0.8;
 }
 
 .category-item.active {
-  background: #37373d;
-  color: #ffffff;
   border-left: 3px solid #0078d4;
 }
 
 .settings-content {
   flex: 1;
   padding: 0;
-  display: flex; /* Make it flex to use full height */
+  display: flex;
   flex-direction: column;
 }
 
@@ -267,26 +373,28 @@ const changeLocale = (newLocale: string) => {
     justify-content: space-between;
     align-items: center;
     padding: 20px 30px;
-    border-bottom: 1px solid #3e3e42;
+    border-bottom: 1px solid;
+    transition: border-color 0.3s;
 }
 
 .settings-header h3 {
     margin: 0;
     font-size: 20px;
     font-weight: 500;
+    transition: color 0.3s;
 }
 
 .close-btn {
     background: none;
     border: none;
-    color: #ccc;
     font-size: 20px;
     cursor: pointer;
     line-height: 1;
+    transition: color 0.2s;
 }
 
 .close-btn:hover {
-    color: #fff;
+    opacity: 0.7;
 }
 
 .settings-section {
@@ -304,7 +412,7 @@ const changeLocale = (newLocale: string) => {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 15px;
-  color: #e7e7e7;
+  transition: color 0.3s;
 }
 
 .theme-grid {
@@ -314,29 +422,28 @@ const changeLocale = (newLocale: string) => {
 }
 
 .theme-card {
-  border: 2px solid transparent;
+  border: 2px solid;
   border-radius: 6px;
   padding: 10px;
   cursor: pointer;
-  background: #2d2d30;
   transition: all 0.2s;
   text-align: center;
 }
 
 .theme-card:hover {
-  background: #3e3e42;
+  opacity: 0.9;
+  transform: translateY(-2px);
 }
 
 .theme-card.active {
-  background: #37373d;
-  border-color: #0078d4;
+  box-shadow: 0 0 0 2px #0078d4;
 }
 
 .theme-preview {
   height: 60px;
   border-radius: 4px;
   margin-bottom: 8px;
-  border: 1px solid #444;
+  border: 1px solid rgba(0, 0, 0, 0.2);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -350,7 +457,7 @@ const changeLocale = (newLocale: string) => {
 
 .theme-name {
   font-size: 12px;
-  color: #cccccc;
+  transition: color 0.3s;
 }
 
 .setting-row {
@@ -375,15 +482,15 @@ const changeLocale = (newLocale: string) => {
 }
 
 .checkbox-text {
-  color: #e7e7e7;
   user-select: none;
+  transition: color 0.3s;
 }
 
 .setting-description {
   margin: 0;
   font-size: 12px;
-  color: #999;
   padding-left: 28px;
+  transition: color 0.3s;
 }
 
 .radio-group {
@@ -408,8 +515,8 @@ const changeLocale = (newLocale: string) => {
 }
 
 .radio-text {
-  color: #e7e7e7;
   user-select: none;
+  transition: color 0.3s;
 }
 
 .select-input {
@@ -417,16 +524,15 @@ const changeLocale = (newLocale: string) => {
   max-width: 300px;
   padding: 8px 12px;
   font-size: 14px;
-  color: #e7e7e7;
-  background: #3c3c3c;
-  border: 1px solid #555;
+  border: 1px solid;
   border-radius: 4px;
   cursor: pointer;
   outline: none;
+  transition: all 0.2s;
 }
 
 .select-input:hover {
-  background: #454545;
+  opacity: 0.9;
 }
 
 .select-input:focus {
@@ -443,9 +549,7 @@ const changeLocale = (newLocale: string) => {
 .font-btn {
   width: 36px;
   height: 36px;
-  border: 1px solid #555;
-  background: #3c3c3c;
-  color: #e7e7e7;
+  border: 1px solid;
   font-size: 18px;
   font-weight: bold;
   border-radius: 4px;
@@ -454,28 +558,26 @@ const changeLocale = (newLocale: string) => {
 }
 
 .font-btn:hover {
-  background: #454545;
+  opacity: 0.9;
   border-color: #0078d4;
 }
 
 .font-btn:active {
-  background: #2d2d30;
+  opacity: 0.7;
 }
 
 .font-size-value {
   min-width: 60px;
   text-align: center;
   font-size: 16px;
-  color: #e7e7e7;
   font-weight: 500;
+  transition: color 0.3s;
 }
 
 .font-reset-btn {
   margin-left: auto;
   padding: 8px 16px;
-  border: 1px solid #555;
-  background: #3c3c3c;
-  color: #e7e7e7;
+  border: 1px solid;
   font-size: 13px;
   border-radius: 4px;
   cursor: pointer;
@@ -483,17 +585,17 @@ const changeLocale = (newLocale: string) => {
 }
 
 .font-reset-btn:hover {
-  background: #454545;
+  opacity: 0.9;
   border-color: #0078d4;
 }
 
 .font-slider {
   width: 100%;
   height: 4px;
-  background: #3c3c3c;
   border-radius: 2px;
   outline: none;
   cursor: pointer;
   accent-color: #0078d4;
+  transition: background 0.3s;
 }
 </style>
