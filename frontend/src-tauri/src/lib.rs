@@ -76,18 +76,30 @@ pub fn run() {
 
             // Handle menu events
             app.on_menu_event(move |app_handle, event| {
-                match event.id().0.as_str() {
+                let menu_id = event.id().0.as_str();
+                println!("[Menu] Event triggered: {}", menu_id);
+
+                match menu_id {
                     "about" => {
+                        println!("[Menu] Opening About dialog");
                         if let Some(window) = app_handle.get_webview_window("main") {
                             let _ = window.emit("menu:about", ());
                         }
                     }
                     "check_updates" => {
+                        println!("[Menu] Check for Updates clicked!");
+                        println!("[Menu] Emitting menu:check-updates event to frontend");
                         if let Some(window) = app_handle.get_webview_window("main") {
-                            let _ = window.emit("menu:check-updates", ());
+                            match window.emit("menu:check-updates", ()) {
+                                Ok(_) => println!("[Menu] ✅ Event emitted successfully"),
+                                Err(e) => println!("[Menu] ❌ Failed to emit event: {:?}", e),
+                            }
+                        } else {
+                            println!("[Menu] ❌ Window 'main' not found!");
                         }
                     }
                     "settings" => {
+                        println!("[Menu] Opening Settings");
                         if let Some(window) = app_handle.get_webview_window("main") {
                             let _ = window.emit("menu:settings", ());
                         }
