@@ -152,17 +152,29 @@ onMounted(async () => {
   }
 
   // Listen for menu events
+  console.log('[App] ========================================')
+  console.log('[App] Setting up menu event listeners...')
+  console.log('[App] ========================================')
+
   try {
+    console.log('[App] Registering menu:settings listener...')
     unlistenSettings = await listen('menu:settings', () => {
+      console.log('[App] menu:settings event received')
       terminalStore.toggleSettings()
     })
+    console.log('[App] ✅ menu:settings listener registered')
 
+    console.log('[App] Registering menu:about listener...')
     unlistenAbout = await listen('menu:about', () => {
+      console.log('[App] menu:about event received')
       terminalStore.toggleAbout()
     })
+    console.log('[App] ✅ menu:about listener registered')
 
+    console.log('[App] Registering menu:check-updates listener...')
     unlistenCheckUpdates = await listen('menu:check-updates', async () => {
       console.log('[App] ========================================')
+      console.log('[App] ✅ menu:check-updates event received!')
       console.log('[App] Manual update check triggered via menu')
       console.log('[App] ========================================')
       try {
@@ -188,10 +200,21 @@ onMounted(async () => {
         alert(`检查更新失败: ${error}`)
       }
     })
+    console.log('[App] ✅ menu:check-updates listener registered')
 
-    console.log('[App] Menu event listeners registered successfully')
+    console.log('[App] ========================================')
+    console.log('[App] ✅ All menu event listeners registered successfully')
+    console.log('[App] Listeners:', {
+      settings: unlistenSettings ? 'registered' : 'failed',
+      about: unlistenAbout ? 'registered' : 'failed',
+      checkUpdates: unlistenCheckUpdates ? 'registered' : 'failed',
+    })
+    console.log('[App] ========================================')
   } catch (error) {
-    console.error('Failed to setup menu event listeners:', error)
+    console.error('[App] ========================================')
+    console.error('[App] ❌ Failed to setup menu event listeners!')
+    console.error('[App] Error:', error)
+    console.error('[App] ========================================')
   }
 
   // Auto-check for updates on startup (delayed 3 seconds)
