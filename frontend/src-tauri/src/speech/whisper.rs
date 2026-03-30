@@ -45,86 +45,24 @@ impl Default for RecognitionState {
     }
 }
 
-/// 检查并请求麦克风权限（macOS）
+/// 检查麦克风权限（安全版本 - 让 cpal 自然触发权限请求）
 #[cfg(target_os = "macos")]
 fn check_microphone_permission() -> Result<bool, String> {
-    unsafe {
-        // 获取 AVCaptureDevice 类
-        let av_capture_device = class!(AVCaptureDevice);
+    println!("[Whisper] Microphone permission check (passive mode)");
+    println!("[Whisper] macOS will request permission when audio capture starts");
+    println!("[Whisper] If you don't see a permission dialog, check: System Settings > Privacy > Microphone");
 
-        // 获取音频媒体类型
-        let av_media_type_audio_str = "AVMediaTypeAudio";
-        let av_media_type_audio: id = msg_send![class!(NSString), stringWithUTF8String: av_media_type_audio_str.as_ptr()];
+    // 在 macOS 上，当我们第一次尝试访问麦克风时，系统会自动显示权限对话框
+    // 我们不需要显式检查，让 cpal 库自然触发即可
+    // 这样避免了 Objective-C 异常问题
 
-        // 检查当前权限状态
-        let auth_status: i64 = msg_send![av_capture_device, authorizationStatusForMediaType: av_media_type_audio];
-
-        println!("[Whisper] Microphone permission status: {}", auth_status);
-        // 0 = NotDetermined (未询问)
-        // 1 = Restricted (受限)
-        // 2 = Denied (拒绝)
-        // 3 = Authorized (已授权)
-
-        match auth_status {
-            3 => {
-                // 已授权
-                println!("[Whisper] ✓ Microphone permission granted");
-                Ok(true)
-            }
-            2 => {
-                // 被拒绝
-                println!("[Whisper] ✗ Microphone permission denied");
-                Err("麦克风权限被拒绝。\n\n请前往：系统设置 > 隐私与安全性 > 麦克风\n启用 Mat 的麦克风权限，然后重启应用。".to_string())
-            }
-            1 => {
-                // 受限
-                println!("[Whisper] ✗ Microphone permission restricted");
-                Err("麦克风访问受限（可能是家长控制或企业策略）。".to_string())
-            }
-            0 => {
-                // 未询问 - 需要请求权限
-                println!("[Whisper] ⚠ Microphone permission not determined, requesting...");
-
-                // 请求权限（这会显示系统对话框）
-                let (tx, rx) = std::sync::mpsc::channel();
-
-                let completion_handler = block::ConcreteBlock::new(move |granted: bool| {
-                    let _ = tx.send(granted);
-                });
-                let completion_handler = completion_handler.copy();
-
-                let _: () = msg_send![av_capture_device,
-                    requestAccessForMediaType: av_media_type_audio
-                    completionHandler: completion_handler];
-
-                // 等待用户响应
-                match rx.recv_timeout(std::time::Duration::from_secs(60)) {
-                    Ok(granted) => {
-                        if granted {
-                            println!("[Whisper] ✓ User granted microphone permission");
-                            Ok(true)
-                        } else {
-                            println!("[Whisper] ✗ User denied microphone permission");
-                            Err("用户拒绝了麦克风权限请求。\n\n如需使用语音识别，请重新启动应用并授予权限。".to_string())
-                        }
-                    }
-                    Err(_) => {
-                        println!("[Whisper] ⚠ Permission request timeout");
-                        Err("权限请求超时。请检查是否有系统对话框需要响应。".to_string())
-                    }
-                }
-            }
-            _ => {
-                println!("[Whisper] ✗ Unknown permission status: {}", auth_status);
-                Err(format!("未知的权限状态: {}", auth_status))
-            }
-        }
-    }
+    Ok(true)
 }
 
 #[cfg(not(target_os = "macos"))]
 fn check_microphone_permission() -> Result<bool, String> {
     // 非 macOS 平台暂时假设有权限
+    println!("[Whisper] Permission check skipped on non-macOS platform");
     Ok(true)
 }
 
@@ -473,15 +411,27 @@ fn capture_audio(audio_tx: Sender<Vec<f32>>) -> Result<(), String> {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
     println!("[Whisper] Initializing audio capture...");
+    println!("[Whisper] Note: On macOS, a permission dialog may appear on first use");
 
     let host = cpal::default_host();
     let device = host.default_input_device()
-        .ok_or("No input device available")?;
+        .ok_or_else(|| {
+            "找不到音频输入设备。\n\n可能原因：\n\
+            1. 没有麦克风硬件\n\
+            2. 麦克风被系统禁用\n\
+            3. 权限被拒绝\n\n\
+            请检查：系统设置 > 隐私与安全性 > 麦克风".to_string()
+        })?;
 
     println!("[Whisper] Using input device: {}", device.name().unwrap_or_default());
 
     let config = device.default_input_config()
-        .map_err(|e| format!("Failed to get default input config: {}", e))?;
+        .map_err(|e| {
+            format!("无法获取音频配置: {}\n\n\
+                    可能是麦克风权限被拒绝。\n\
+                    请检查：系统设置 > 隐私与安全性 > 麦克风\n\
+                    确保 Mat 已被启用。", e)
+        })?;
 
     println!("[Whisper] Audio format: {:?}", config);
 
@@ -518,11 +468,26 @@ fn capture_audio(audio_tx: Sender<Vec<f32>>) -> Result<(), String> {
             )
         }
         _ => {
-            return Err("Unsupported sample format".to_string());
+            return Err("不支持的音频采样格式".to_string());
         }
-    }.map_err(|e| format!("Failed to build input stream: {}", e))?;
+    }.map_err(|e| {
+        format!("无法创建音频流: {}\n\n\
+                这通常意味着麦克风权限被拒绝。\n\n\
+                解决方案：\n\
+                1. 打开：系统设置 > 隐私与安全性 > 麦克风\n\
+                2. 启用 Mat 的麦克风权限\n\
+                3. 重启 Mat 应用\n\n\
+                如果 Mat 不在列表中，说明权限请求失败。\n\
+                请尝试运行：tccutil reset Microphone com.hierifer.mat", e)
+    })?;
 
-    stream.play().map_err(|e| format!("Failed to start stream: {}", e))?;
+    stream.play().map_err(|e| {
+        format!("无法启动音频流: {}\n\n\
+                请确保：\n\
+                1. 麦克风未被其他应用占用\n\
+                2. 麦克风硬件正常工作\n\
+                3. 系统音频服务正常", e)
+    })?;
 
     println!("[Whisper] Audio capture started");
 
