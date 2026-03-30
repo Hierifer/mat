@@ -15,6 +15,7 @@ const props = defineProps<{
 }>()
 
 const terminalRef = ref<HTMLElement | null>(null)
+const showScrollToBottom = ref(false)
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let resizeObserver: ResizeObserver | null = null
@@ -61,6 +62,26 @@ const debouncedResize = (cols: number, rows: number) => {
   }, 100) as unknown as number
 }
 
+// Check if terminal is scrolled to bottom
+const checkScrollPosition = () => {
+  if (!terminal) return
+
+  const buffer = terminal.buffer.active
+  const viewport = buffer.viewportY
+  const base = buffer.baseY
+
+  // Show button if scrolled up more than 3 lines from bottom
+  showScrollToBottom.value = (base - viewport) > 3
+}
+
+// Scroll terminal to bottom
+const scrollToBottom = () => {
+  if (terminal) {
+    terminal.scrollToBottom()
+    showScrollToBottom.value = false
+  }
+}
+
 onMounted(async () => {
   console.log(`[Terminal] Mounting terminal for session: ${props.sessionId}`)
   if (!terminalRef.value) return
@@ -100,6 +121,16 @@ onMounted(async () => {
   terminal.loadAddon(fitAddon)
   terminal.loadAddon(webLinksAddon)
   terminal.open(terminalRef.value)
+
+  // Listen for scroll events to show/hide scroll-to-bottom button
+  terminal.onScroll(() => {
+    checkScrollPosition()
+  })
+
+  // Also check on write events (when new data arrives)
+  terminal.onWriteParsed(() => {
+    checkScrollPosition()
+  })
 
   // 初始化输出缓冲器
   outputBuffer = useOutputBuffer(terminal, {
@@ -228,14 +259,50 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div
-    ref="terminalRef"
-    class="terminal-container"
-    :style="{ backgroundColor: store.currentTheme.background }"
-  />
+  <div class="terminal-wrapper">
+    <!-- Scroll to Bottom Button -->
+    <transition name="fade">
+      <button
+        v-if="showScrollToBottom"
+        class="scroll-to-bottom-btn"
+        @click="scrollToBottom"
+        title="滚动到底部 (Scroll to Bottom)"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M8 12L3 7L4.4 5.6L8 9.2L11.6 5.6L13 7L8 12Z"
+            fill="currentColor"
+          />
+          <path
+            d="M3 13H13V14H3V13Z"
+            fill="currentColor"
+          />
+        </svg>
+        <span class="btn-text">回到底部</span>
+      </button>
+    </transition>
+
+    <div
+      ref="terminalRef"
+      class="terminal-container"
+      :style="{ backgroundColor: store.currentTheme.background }"
+    />
+  </div>
 </template>
 
 <style scoped>
+.terminal-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .terminal-container {
   width: 100%;
   height: 100%;
@@ -243,5 +310,73 @@ onUnmounted(() => {
   padding-bottom: 32px; /* Ensure space at bottom */
   box-sizing: border-box;
   overflow: hidden;
+}
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 8px 16px;
+  background: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+  transition: all 0.2s ease;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: rgba(40, 40, 40, 0.98);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.scroll-to-bottom-btn:active {
+  transform: translateX(-50%) translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.scroll-to-bottom-btn svg {
+  flex-shrink: 0;
+}
+
+.btn-text {
+  white-space: nowrap;
+}
+
+/* Fade transition */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.fade-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+}
+
+.fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+}
+
+.fade-enter-to,
+.fade-leave-from {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 </style>
