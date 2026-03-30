@@ -7,6 +7,7 @@ import 'xterm/css/xterm.css'
 import { usePtySession } from '@/composables/use-pty-session'
 import { useTerminalStore, type SplitNode } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
+import { useOutputBuffer } from '@/composables/use-output-buffer'
 
 const props = defineProps<{
   sessionId: string
@@ -19,6 +20,7 @@ let fitAddon: FitAddon | null = null
 let resizeObserver: ResizeObserver | null = null
 let resizeTimeout: number | null = null
 let isUnmounting = false
+let outputBuffer: ReturnType<typeof useOutputBuffer> | null = null
 
 const store = useTerminalStore()
 const { connect, write, resize, isConnected } = usePtySession(props.sessionId)
@@ -63,13 +65,18 @@ onMounted(async () => {
   console.log(`[Terminal] Mounting terminal for session: ${props.sessionId}`)
   if (!terminalRef.value) return
 
-  // Initialize xterm.js
+  // Initialize xterm.js with performance optimizations
   terminal = new Terminal({
     fontFamily: '"JetBrains Mono", "Courier New", monospace',
     fontSize: store.fontSize,
     cursorBlink: true,
     allowTransparency: true,
     theme: store.currentTheme,
+    // 性能优化选项
+    scrollback: 10000, // 限制滚动缓冲区为 10000 行（默认 1000）
+    fastScrollModifier: 'shift', // Shift+滚轮快速滚动
+    fastScrollSensitivity: 5, // 快速滚动敏感度
+    windowsMode: false, // 禁用 Windows 换行模式可以提升性能
   })
 
   // Watch for theme changes
@@ -93,6 +100,14 @@ onMounted(async () => {
   terminal.loadAddon(fitAddon)
   terminal.loadAddon(webLinksAddon)
   terminal.open(terminalRef.value)
+
+  // 初始化输出缓冲器
+  outputBuffer = useOutputBuffer(terminal, {
+    batchInterval: 16, // ~60fps
+    maxBufferSize: 1024 * 1024, // 1MB
+    maxBatchSize: 64 * 1024, // 64KB per batch
+    enabled: true, // 启用输出节流
+  })
 
   // Fit terminal to container
   fitAddon.fit()
@@ -132,8 +147,13 @@ onMounted(async () => {
       }
     }
 
-    // Write data to terminal
-    terminal?.write(data)
+    // 使用输出缓冲器写入数据（优化性能）
+    if (outputBuffer) {
+      outputBuffer.write(data)
+    } else {
+      // 后备方案：直接写入
+      terminal?.write(data)
+    }
 
     // Monitor output for command completion
     const outputText = new TextDecoder().decode(data)
@@ -194,6 +214,11 @@ onUnmounted(() => {
   if (resizeTimeout) {
     clearTimeout(resizeTimeout)
   }
+
+  // 清理输出缓冲器
+  outputBuffer?.dispose()
+  outputBuffer = null
+
   resizeObserver?.disconnect()
   terminal?.dispose()
 
