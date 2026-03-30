@@ -168,21 +168,41 @@ fn process_audio_stream(
     app: tauri::AppHandle,
     language: String,
 ) {
-    println!("[Whisper] Audio processing thread started");
+    println!("[Whisper] Audio processing thread started (language: {})", language);
+
+    let mut chunk_count = 0;
 
     while let Ok(audio_chunk) = rx.recv() {
-        if let Ok(text) = transcribe_audio(&ctx, &audio_chunk, &language) {
-            if !text.trim().is_empty() {
-                println!("[Whisper] Transcribed: {}", text);
-                let _ = app.emit("speech-result", SpeechRecognitionResult {
-                    text,
-                    is_final: false,
-                });
+        chunk_count += 1;
+
+        // 计算音频特征用于调试
+        let rms = (audio_chunk.iter()
+            .map(|&s| s * s)
+            .sum::<f32>() / audio_chunk.len() as f32)
+            .sqrt();
+
+        println!("[Whisper] Processing chunk #{} ({} samples, RMS: {:.4})",
+                 chunk_count, audio_chunk.len(), rms);
+
+        match transcribe_audio(&ctx, &audio_chunk, &language) {
+            Ok(text) => {
+                if !text.trim().is_empty() {
+                    println!("[Whisper] ✓ Transcribed: '{}'", text);
+                    let _ = app.emit("speech-result", SpeechRecognitionResult {
+                        text,
+                        is_final: false,
+                    });
+                } else {
+                    println!("[Whisper] ○ No speech detected (silent or filtered)");
+                }
+            }
+            Err(e) => {
+                println!("[Whisper] ✗ Transcription error: {}", e);
             }
         }
     }
 
-    println!("[Whisper] Audio processing thread stopped");
+    println!("[Whisper] Audio processing thread stopped (processed {} chunks)", chunk_count);
 }
 
 // Capture audio from microphone
@@ -305,8 +325,39 @@ fn resample_audio(input: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
     output
 }
 
+// 检测音频是否包含语音（简单的音量检测）
+fn has_speech_activity(audio_data: &[f32]) -> bool {
+    // 计算 RMS (均方根) 音量
+    let rms = (audio_data.iter()
+        .map(|&s| s * s)
+        .sum::<f32>() / audio_data.len() as f32)
+        .sqrt();
+
+    // 音量阈值 - 低于此值认为是静音
+    const SILENCE_THRESHOLD: f32 = 0.01;
+
+    if rms < SILENCE_THRESHOLD {
+        return false;
+    }
+
+    // 检查是否有足够的非零样本
+    let non_zero_samples = audio_data.iter()
+        .filter(|&&s| s.abs() > 0.001)
+        .count();
+
+    let non_zero_ratio = non_zero_samples as f32 / audio_data.len() as f32;
+
+    // 至少 10% 的样本应该是有意义的声音
+    non_zero_ratio > 0.1
+}
+
 // Transcribe audio using Whisper
 fn transcribe_audio(ctx: &WhisperContext, audio_data: &[f32], language: &str) -> Result<String, String> {
+    // 首先检查是否有语音活动
+    if !has_speech_activity(audio_data) {
+        return Ok(String::new()); // 返回空字符串，不转录静音
+    }
+
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
 
     // Set language
@@ -314,6 +365,16 @@ fn transcribe_audio(ctx: &WhisperContext, audio_data: &[f32], language: &str) ->
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
+
+    // 防止幻觉的关键参数
+    params.set_suppress_blank(true);  // 抑制空白输出
+    params.set_suppress_non_speech_tokens(true);  // 抑制非语音标记
+
+    // 设置温度为 0 以获得最确定的结果（减少随机性）
+    params.set_temperature(0.0);
+
+    // 提高无语音概率阈值
+    params.set_no_speech_thold(0.6);  // 默认 0.6，提高可以减少幻觉
 
     // Create a new state for this transcription
     let mut state = ctx.create_state()
@@ -335,5 +396,91 @@ fn transcribe_audio(ctx: &WhisperContext, audio_data: &[f32], language: &str) ->
         }
     }
 
-    Ok(result.trim().to_string())
+    let result = result.trim().to_string();
+
+    // 过滤常见的 Whisper 幻觉短语
+    if is_hallucination(&result) {
+        println!("[Whisper] Filtered hallucination: '{}'", result);
+        return Ok(String::new());
+    }
+
+    Ok(result)
+}
+
+// 检测是否是 Whisper 的常见幻觉
+fn is_hallucination(text: &str) -> bool {
+    if text.is_empty() {
+        return true;
+    }
+
+    // 常见的中文幻觉短语
+    const CHINESE_HALLUCINATIONS: &[&str] = &[
+        "你不是在那裡嗎",
+        "你不是在那里吗",
+        "謝謝觀看",
+        "谢谢观看",
+        "請訂閱",
+        "请订阅",
+        "字幕由",
+        "Amara.org",
+        "請不要忘記訂閱",
+    ];
+
+    // 常见的英文幻觉短语
+    const ENGLISH_HALLUCINATIONS: &[&str] = &[
+        "Thanks for watching",
+        "Please subscribe",
+        "Don't forget to subscribe",
+        "Subtitles by",
+        "Transcribed by",
+        "www.amara.org",
+    ];
+
+    let text_lower = text.to_lowercase();
+
+    // 检查是否匹配已知幻觉
+    for phrase in CHINESE_HALLUCINATIONS.iter().chain(ENGLISH_HALLUCINATIONS.iter()) {
+        if text.contains(phrase) || text_lower.contains(&phrase.to_lowercase()) {
+            return true;
+        }
+    }
+
+    // 检查是否是重复字符（另一种幻觉形式）
+    if is_repetitive(text) {
+        return true;
+    }
+
+    // 太短的输出可能是噪音
+    if text.len() < 2 {
+        return true;
+    }
+
+    false
+}
+
+// 检测重复文本
+fn is_repetitive(text: &str) -> bool {
+    if text.len() < 6 {
+        return false;
+    }
+
+    // 检查是否有字符重复超过 5 次
+    let chars: Vec<char> = text.chars().collect();
+    for i in 0..chars.len() - 5 {
+        if chars[i..i+5].iter().all(|&c| c == chars[i]) {
+            return true;
+        }
+    }
+
+    // 检查是否有词组重复（如 "ABC ABC ABC"）
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() >= 3 {
+        for i in 0..words.len() - 2 {
+            if words[i] == words[i+1] && words[i+1] == words[i+2] {
+                return true;
+            }
+        }
+    }
+
+    false
 }
