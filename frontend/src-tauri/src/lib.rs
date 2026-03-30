@@ -155,6 +155,7 @@ pub fn run() {
             pty::commands::settings_update,
             // speech commands
             speech::speech_check_availability,
+            speech::speech_check_permission,
             speech::speech_start_recognition,
             speech::speech_stop_recognition,
             speech::speech_is_listening,
