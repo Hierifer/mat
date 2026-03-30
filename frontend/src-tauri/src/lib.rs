@@ -16,6 +16,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_macos_permissions::init())
         .setup(|app| {
             // Use tokio Mutex for async compatibility in commands
             let pty_manager = Arc::new(Mutex::new(PtyManager::new()));

@@ -5,11 +5,6 @@ use tauri::Emitter;
 use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
 use std::path::PathBuf;
 
-#[cfg(target_os = "macos")]
-use objc::{msg_send, sel, sel_impl, class};
-#[cfg(target_os = "macos")]
-use cocoa::base::id;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpeechRecognitionResult {
     pub text: String,
@@ -45,24 +40,11 @@ impl Default for RecognitionState {
     }
 }
 
-/// 检查麦克风权限（安全版本 - 让 cpal 自然触发权限请求）
-#[cfg(target_os = "macos")]
+/// 检查麦克风权限（被动模式 - 让系统自然触发）
 fn check_microphone_permission() -> Result<bool, String> {
-    println!("[Whisper] Microphone permission check (passive mode)");
-    println!("[Whisper] macOS will request permission when audio capture starts");
-    println!("[Whisper] If you don't see a permission dialog, check: System Settings > Privacy > Microphone");
-
-    // 在 macOS 上，当我们第一次尝试访问麦克风时，系统会自动显示权限对话框
-    // 我们不需要显式检查，让 cpal 库自然触发即可
-    // 这样避免了 Objective-C 异常问题
-
-    Ok(true)
-}
-
-#[cfg(not(target_os = "macos"))]
-fn check_microphone_permission() -> Result<bool, String> {
-    // 非 macOS 平台暂时假设有权限
-    println!("[Whisper] Permission check skipped on non-macOS platform");
+    println!("[Whisper] Permission check (passive mode)");
+    println!("[Whisper] System will show permission dialog on first microphone access");
+    // 让 cpal 库在首次访问麦克风时自然触发系统权限请求
     Ok(true)
 }
 
@@ -241,11 +223,11 @@ pub async fn speech_start_recognition(
 ) -> Result<(), String> {
     println!("[Whisper] Starting recognition with language: {:?}", language);
 
-    // 首先检查麦克风权限
+    // 首先检查麦克风权限（被动检查）
     println!("[Whisper] Checking microphone permission...");
     match check_microphone_permission() {
         Ok(true) => {
-            println!("[Whisper] ✓ Permission check passed");
+            println!("[Whisper] ✓ Permission check passed (passive mode)");
         }
         Ok(false) => {
             return Err("麦克风权限检查失败".to_string());

@@ -67,6 +67,26 @@ export function useSpeechRecognition() {
       try {
         const nativeAvailable = await invoke<boolean>('speech_check_availability')
         if (nativeAvailable) {
+          // On macOS, request microphone permission first
+          if (isMacOS.value) {
+            try {
+              // Use Tauri macOS permissions plugin
+              // @ts-ignore
+              const { requestPermission } = await import('tauri-plugin-macos-permissions-api')
+              const micPermission = await requestPermission('microphone')
+              console.log('[Speech] Microphone permission:', micPermission)
+
+              if (micPermission === 'denied') {
+                error.value = '麦克风权限被拒绝。请前往 系统设置 > 隐私与安全性 > 麦克风 启用 Mat 的权限。'
+                isSupported.value = false
+                return false
+              }
+            } catch (permErr) {
+              console.warn('[Speech] Permission check failed:', permErr)
+              // Continue anyway, let the system handle it
+            }
+          }
+
           // Use Whisper API (cross-platform)
           useNativeAPI.value = true
           isSupported.value = true

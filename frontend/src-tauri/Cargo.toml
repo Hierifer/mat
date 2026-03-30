@@ -41,6 +41,7 @@ lazy_static = "1.4"
 whisper-rs = "0.12"
 hound = "3.5"  # For audio file I/O
 cpal = "0.15"  # For microphone capture
+tauri-plugin-macos-permissions = "2.3.0"
 
 # macOS native speech recognition (only on macOS, deprecated in favor of Whisper)
 [target.'cfg(target_os = "macos")'.dependencies]
