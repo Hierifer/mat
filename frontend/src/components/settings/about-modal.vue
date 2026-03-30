@@ -21,16 +21,7 @@ onMounted(async () => {
     <div class="about-modal">
       <div class="about-header">
         <div class="app-icon">
-          <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="64" height="64" rx="12" fill="url(#gradient)"/>
-            <path d="M16 20h32v4H16zM16 32h32v4H16zM16 44h32v4H16z" fill="white"/>
-            <defs>
-              <linearGradient id="gradient" x1="0" y1="0" x2="64" y2="64">
-                <stop offset="0%" stop-color="#0078d4"/>
-                <stop offset="100%" stop-color="#00bcf2"/>
-              </linearGradient>
-            </defs>
-          </svg>
+          <img src="/favicon.svg" alt="Mat icon" class="app-icon-img" />
         </div>
         <h1 class="app-name">Mat</h1>
         <p class="app-version">Version {{ version }}</p>
@@ -128,6 +119,12 @@ onMounted(async () => {
   margin: 0 auto 20px;
   width: 64px;
   height: 64px;
+}
+
+.app-icon-img {
+  width: 64px;
+  height: 64px;
+  display: block;
 }
 
 .app-name {

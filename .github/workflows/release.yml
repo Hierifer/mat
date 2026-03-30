@@ -80,6 +80,23 @@ jobs:
           cd frontend
           npm install
 
+      - name: Check signing configuration
+        run: |
+          echo "Checking Tauri signing configuration..."
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "✅ TAURI_SIGNING_PRIVATE_KEY is set (${#TAURI_SIGNING_PRIVATE_KEY} chars)"
+          else
+            echo "❌ TAURI_SIGNING_PRIVATE_KEY is NOT set - updater artifacts will NOT be generated!"
+          fi
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+            echo "✅ TAURI_SIGNING_PRIVATE_KEY_PASSWORD is set"
+          else
+            echo "❌ TAURI_SIGNING_PRIVATE_KEY_PASSWORD is NOT set - updater artifacts will NOT be generated!"
+          fi
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
       - name: Build and sign application
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -91,6 +108,13 @@ jobs:
         run: |
           cd frontend
           npm run tauri build -- --target ${{ matrix.target }}
+
+      - name: List generated files
+        run: |
+          echo "=== Generated bundle files ==="
+          find frontend/src-tauri/target/${{ matrix.target }}/release/bundle -type f | sort
+          echo "=== Checking for latest.json ==="
+          find frontend/src-tauri/target/${{ matrix.target }}/release/bundle -name "latest.json" -type f || echo "⚠️ latest.json NOT FOUND"
 
       - name: Notarize macOS app (macOS)
         if: matrix.platform == 'macos-latest'
@@ -126,20 +150,41 @@ jobs:
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
 
-      - name: Upload Release Assets
+      - name: Upload Release Assets (macOS)
+        if: matrix.platform == 'macos-latest'
         uses: softprops/action-gh-release@v2
         with:
           files: |
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz.sig
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi.zip
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi.zip.sig
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/latest.json
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+      - name: Upload Release Assets (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage.tar.gz
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage.tar.gz.sig
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/latest.json
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+      - name: Upload Release Assets (Windows)
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi.zip
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi.zip.sig
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/latest.json
           draft: false
           prerelease: false
