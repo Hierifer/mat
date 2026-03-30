@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { useTerminalStore } from '@/stores/terminal-store'
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 
 const store = useTerminalStore()
 const version = ref('0.1.17')
+const currentYear = computed(() => new Date().getFullYear())
 
 onMounted(async () => {
   try {
@@ -63,7 +64,7 @@ onMounted(async () => {
         </div>
 
         <div class="about-footer">
-          <p class="copyright">© 2024 Hierifer. All rights reserved.</p>
+          <p class="copyright">© {{ currentYear }} Hierifer. All rights reserved.</p>
         </div>
       </div>
     </div>
