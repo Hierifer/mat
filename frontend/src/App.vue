@@ -162,22 +162,34 @@ onMounted(async () => {
     })
 
     unlistenCheckUpdates = await listen('menu:check-updates', async () => {
-      console.log('[App] Manual update check triggered')
+      console.log('[App] ========================================')
+      console.log('[App] Manual update check triggered via menu')
+      console.log('[App] ========================================')
       try {
+        console.log('[App] Calling checkForUpdates(false)...')
         const hasUpdate = await checkForUpdates(false)
+        console.log('[App] checkForUpdates returned:', hasUpdate)
+
         if (hasUpdate) {
+          console.log('[App] Update available, showing dialog')
           showUpdateDialog.value = true
           await notifyInfo('发现新版本', '点击更新对话框查看详情')
         } else {
+          console.log('[App] No update available, showing alert')
           // Show "already up to date" message
           alert('您已经在使用最新版本！')
           await notifySuccess('已是最新版本', '您正在使用最新版本的 Mat Terminal')
         }
       } catch (error) {
-        console.error('[App] Update check failed:', error)
-        alert('检查更新失败，请稍后重试')
+        console.error('[App] ========================================')
+        console.error('[App] Update check FAILED with error:', error)
+        console.error('[App] Error details:', JSON.stringify(error, null, 2))
+        console.error('[App] ========================================')
+        alert(`检查更新失败: ${error}`)
       }
     })
+
+    console.log('[App] Menu event listeners registered successfully')
   } catch (error) {
     console.error('Failed to setup menu event listeners:', error)
   }

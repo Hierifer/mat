@@ -17,31 +17,44 @@ export function useUpdater() {
   const error = ref<string | null>(null)
 
   const checkForUpdates = async (silent = false): Promise<boolean> => {
+    console.log('[Updater] ========================================')
+    console.log('[Updater] checkForUpdates called, silent:', silent)
     isChecking.value = true
     error.value = null
 
     try {
-      console.log('[Updater] Checking for updates...')
+      console.log('[Updater] Calling Tauri updater check()...')
       const update = await check()
+      console.log('[Updater] check() returned:', update)
 
       if (update) {
-        console.log('[Updater] Update available:', update.version)
+        console.log('[Updater] ✅ Update available!')
+        console.log('[Updater] Version:', update.version)
+        console.log('[Updater] Date:', update.date)
+        console.log('[Updater] Body length:', update.body?.length || 0)
         updateAvailable.value = true
         updateInfo.value = {
           version: update.version,
           date: update.date,
           body: update.body,
         }
+        console.log('[Updater] ========================================')
         return true
       } else {
-        console.log('[Updater] No updates available')
+        console.log('[Updater] ❌ No updates available (already on latest)')
         updateAvailable.value = false
         updateInfo.value = null
+        console.log('[Updater] ========================================')
         return false
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      console.error('[Updater] Check failed:', errorMessage)
+      console.error('[Updater] ========================================')
+      console.error('[Updater] ❌ Check FAILED!')
+      console.error('[Updater] Error type:', typeof err)
+      console.error('[Updater] Error message:', errorMessage)
+      console.error('[Updater] Full error:', err)
+      console.error('[Updater] ========================================')
       error.value = errorMessage
 
       if (!silent) {
