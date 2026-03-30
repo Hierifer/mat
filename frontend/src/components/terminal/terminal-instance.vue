@@ -20,8 +20,10 @@ let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let resizeObserver: ResizeObserver | null = null
 let resizeTimeout: number | null = null
+let resizeAnimationFrame: number | null = null
 let isUnmounting = false
 let outputBuffer: ReturnType<typeof useOutputBuffer> | null = null
+let lastKnownDimensions: { cols: number; rows: number } | null = null
 
 const store = useTerminalStore()
 const { connect, write, resize, isConnected } = usePtySession(props.sessionId)
@@ -227,13 +229,41 @@ onMounted(async () => {
     }
   }, { immediate: false })
 
-  // Handle resize with debouncing
+  // Handle resize with debouncing and dimension change detection
   resizeObserver = new ResizeObserver(() => {
-    fitAddon?.fit()
-    const dims = fitAddon?.proposeDimensions()
-    if (dims) {
-      debouncedResize(dims.cols, dims.rows)
+    // Cancel any pending animation frame to avoid multiple rapid calls
+    if (resizeAnimationFrame) {
+      cancelAnimationFrame(resizeAnimationFrame)
     }
+
+    // Use requestAnimationFrame to batch resize operations
+    resizeAnimationFrame = requestAnimationFrame(() => {
+      if (isUnmounting || !fitAddon) return
+
+      // Get proposed dimensions before fitting
+      const proposedDims = fitAddon.proposeDimensions()
+      if (!proposedDims) return
+
+      // Check if dimensions actually changed
+      const dimsChanged =
+        !lastKnownDimensions ||
+        lastKnownDimensions.cols !== proposedDims.cols ||
+        lastKnownDimensions.rows !== proposedDims.rows
+
+      if (dimsChanged) {
+        // Update last known dimensions
+        lastKnownDimensions = {
+          cols: proposedDims.cols,
+          rows: proposedDims.rows,
+        }
+
+        // Fit the terminal to new dimensions
+        fitAddon.fit()
+
+        // Debounce the PTY resize call
+        debouncedResize(proposedDims.cols, proposedDims.rows)
+      }
+    }) as unknown as number
   })
   resizeObserver.observe(terminalRef.value)
 })
@@ -242,8 +272,12 @@ onUnmounted(() => {
   console.log(`[Terminal] Unmounting terminal for session: ${props.sessionId}`)
   isUnmounting = true
 
+  // Clean up timers and animation frames
   if (resizeTimeout) {
     clearTimeout(resizeTimeout)
+  }
+  if (resizeAnimationFrame) {
+    cancelAnimationFrame(resizeAnimationFrame)
   }
 
   // 清理输出缓冲器
