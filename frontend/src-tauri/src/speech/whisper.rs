@@ -47,6 +47,160 @@ pub async fn speech_check_availability() -> Result<bool, String> {
     Ok(model_path.exists())
 }
 
+/// 列出可用的音频输入设备（用于调试）
+#[tauri::command]
+pub async fn speech_list_devices() -> Result<Vec<String>, String> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+
+    let host = cpal::default_host();
+    let mut devices = Vec::new();
+
+    // 列出所有输入设备
+    match host.input_devices() {
+        Ok(input_devices) => {
+            for (idx, device) in input_devices.enumerate() {
+                if let Ok(name) = device.name() {
+                    devices.push(format!("{}. {}", idx + 1, name));
+                }
+            }
+        }
+        Err(e) => {
+            return Err(format!("Failed to enumerate devices: {}", e));
+        }
+    }
+
+    // 获取默认输入设备
+    if let Some(default_device) = host.default_input_device() {
+        if let Ok(name) = default_device.name() {
+            devices.insert(0, format!("默认设备: {}", name));
+        }
+    }
+
+    Ok(devices)
+}
+
+/// 测试麦克风录音（录制 2 秒并返回音量信息）
+#[tauri::command]
+pub async fn speech_test_microphone() -> Result<String, String> {
+    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+    use std::sync::{Arc, Mutex};
+
+    let host = cpal::default_host();
+    let device = host.default_input_device()
+        .ok_or("No input device available")?;
+
+    let config = device.default_input_config()
+        .map_err(|e| format!("Failed to get config: {}", e))?;
+
+    println!("[Test] Device: {}", device.name().unwrap_or_default());
+    println!("[Test] Config: {:?}", config);
+
+    let sample_rate = config.sample_rate().0;
+    let channels = config.channels() as usize;
+
+    // 收集 2 秒的音频数据
+    let audio_data = Arc::new(Mutex::new(Vec::new()));
+    let audio_data_clone = audio_data.clone();
+    let max_samples = sample_rate as usize * 2; // 2 seconds
+
+    let stream = match config.sample_format() {
+        cpal::SampleFormat::F32 => {
+            device.build_input_stream(
+                &config.into(),
+                move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    let mut audio = audio_data_clone.lock().unwrap();
+                    if audio.len() < max_samples {
+                        audio.extend_from_slice(data);
+                    }
+                },
+                |err| eprintln!("[Test] Error: {}", err),
+                None,
+            )
+        }
+        cpal::SampleFormat::I16 => {
+            device.build_input_stream(
+                &config.into(),
+                move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                    let mut audio = audio_data_clone.lock().unwrap();
+                    if audio.len() < max_samples {
+                        let float_data: Vec<f32> = data.iter()
+                            .map(|&s| s as f32 / i16::MAX as f32)
+                            .collect();
+                        audio.extend_from_slice(&float_data);
+                    }
+                },
+                |err| eprintln!("[Test] Error: {}", err),
+                None,
+            )
+        }
+        _ => {
+            return Err("Unsupported sample format".to_string());
+        }
+    }.map_err(|e| format!("Failed to build stream: {}", e))?;
+
+    stream.play().map_err(|e| format!("Failed to start stream: {}", e))?;
+
+    println!("[Test] Recording for 2 seconds... Please speak!");
+
+    // 等待 2 秒
+    std::thread::sleep(std::time::Duration::from_secs(2));
+
+    drop(stream);
+
+    let audio = audio_data.lock().unwrap();
+    let samples = audio.len();
+
+    if samples == 0 {
+        return Ok("⚠️ 没有捕获到任何音频！\n\n可能原因：\n1. 麦克风权限被拒绝\n2. 麦克风被禁用或静音\n3. 系统音频设置问题\n\n请检查：系统设置 > 隐私与安全性 > 麦克风".to_string());
+    }
+
+    // 计算音频统计信息
+    let rms = (audio.iter()
+        .map(|&s| s * s)
+        .sum::<f32>() / samples as f32)
+        .sqrt();
+
+    let max_amplitude = audio.iter()
+        .map(|&s| s.abs())
+        .fold(0.0f32, |a, b| a.max(b));
+
+    let non_zero = audio.iter()
+        .filter(|&&s| s.abs() > 0.001)
+        .count();
+
+    let result = format!(
+        "✅ 麦克风测试成功！\n\n\
+        录制信息：\n\
+        - 采样数: {}\n\
+        - 采样率: {} Hz\n\
+        - 声道数: {}\n\
+        - 录制时长: {:.1} 秒\n\n\
+        音频质量：\n\
+        - RMS 音量: {:.6}\n\
+        - 最大振幅: {:.6}\n\
+        - 有效样本: {:.1}%\n\n\
+        诊断：\n{}",
+        samples,
+        sample_rate,
+        channels,
+        samples as f32 / sample_rate as f32,
+        rms,
+        max_amplitude,
+        (non_zero as f32 / samples as f32) * 100.0,
+        if rms < 0.001 {
+            "⚠️ 音量太低！请大声说话或靠近麦克风"
+        } else if rms < 0.01 {
+            "⚡ 音量较低，可以检测到语音但可能识别率较低"
+        } else if rms < 0.1 {
+            "✓ 音量正常，适合语音识别"
+        } else {
+            "✓ 音量很好！"
+        }
+    );
+
+    Ok(result)
+}
+
 /// Start speech recognition
 #[tauri::command]
 pub async fn speech_start_recognition(

@@ -158,6 +158,8 @@ pub fn run() {
             speech::speech_start_recognition,
             speech::speech_stop_recognition,
             speech::speech_is_listening,
+            speech::speech_list_devices,
+            speech::speech_test_microphone,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

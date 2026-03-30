@@ -8,4 +8,6 @@ pub use whisper::{
     speech_start_recognition, __cmd__speech_start_recognition,
     speech_stop_recognition, __cmd__speech_stop_recognition,
     speech_is_listening, __cmd__speech_is_listening,
+    speech_list_devices, __cmd__speech_list_devices,
+    speech_test_microphone, __cmd__speech_test_microphone,
 };
