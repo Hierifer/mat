@@ -96,11 +96,52 @@ onMounted(async () => {
     allowTransparency: true,
     theme: store.currentTheme,
     // 性能优化选项
-    scrollback: 10000, // 限制滚动缓冲区为 10000 行（默认 1000）
+    scrollback: 3000, // 减少到 3000 行，防止内存泄漏（之前 10000 太大）
     fastScrollModifier: 'shift', // Shift+滚轮快速滚动
     fastScrollSensitivity: 5, // 快速滚动敏感度
     windowsMode: false, // 禁用 Windows 换行模式可以提升性能
   })
+
+  // Monitor buffer size and enforce scrollback limit
+  let lastBufferCheck = Date.now()
+  let lastBufferSize = 0
+  const BUFFER_CHECK_INTERVAL = 1000 // Check every 1 second
+  const MAX_BUFFER_ROWS = 5000 // Hard limit: 3000 scrollback + 2000 buffer = 5000 max
+
+  const checkAndTrimBuffer = () => {
+    if (!terminal) return
+
+    const now = Date.now()
+    if (now - lastBufferCheck < BUFFER_CHECK_INTERVAL) return
+
+    lastBufferCheck = now
+    const buffer = terminal.buffer.active
+    const totalRows = buffer.baseY + buffer.cursorY
+
+    // Log buffer growth for debugging
+    if (totalRows > lastBufferSize + 1000) {
+      console.log(`[Terminal] Buffer size: ${totalRows} rows (growth: +${totalRows - lastBufferSize})`)
+      lastBufferSize = totalRows
+    }
+
+    // Emergency brake: if buffer grows beyond hard limit, warn user and reset
+    if (totalRows > MAX_BUFFER_ROWS) {
+      console.error(`[Terminal] ⚠️ CRITICAL: Buffer exceeded ${MAX_BUFFER_ROWS} rows (${totalRows})`)
+      console.error('[Terminal] This indicates xterm scrollback is not working properly')
+      console.error('[Terminal] Resetting terminal to prevent crash...')
+
+      // Instead of clearing, just disable the output buffer temporarily
+      // and let xterm catch up
+      if (outputBuffer) {
+        console.log('[Terminal] Pausing output buffer to allow xterm to catch up')
+        outputBuffer.pause()
+        setTimeout(() => {
+          outputBuffer?.resume()
+          console.log('[Terminal] Resumed output buffer')
+        }, 2000)
+      }
+    }
+  }
 
   // Watch for theme changes
   watch(() => store.currentThemeName, () => {
@@ -136,6 +177,7 @@ onMounted(async () => {
   // Also check on write events (when new data arrives)
   terminal.onWriteParsed(() => {
     checkScrollPosition()
+    checkAndTrimBuffer() // Prevent infinite buffer growth
   })
 
   // 初始化输出缓冲器
