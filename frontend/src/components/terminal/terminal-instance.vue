@@ -118,28 +118,65 @@ onMounted(async () => {
     const buffer = terminal.buffer.active
     const totalRows = buffer.baseY + buffer.cursorY
 
-    // Log buffer growth for debugging
+    // Also check viewport and selection coordinates
+    const viewportY = buffer.viewportY
+    const baseY = buffer.baseY
+
+    // Log detailed buffer state
     if (totalRows > lastBufferSize + 1000) {
-      console.log(`[Terminal] Buffer size: ${totalRows} rows (growth: +${totalRows - lastBufferSize})`)
+      console.log(`[Terminal] Buffer state:`, {
+        totalRows,
+        baseY,
+        viewportY,
+        cursorY: buffer.cursorY,
+        growth: totalRows - lastBufferSize
+      })
       lastBufferSize = totalRows
     }
 
-    // Emergency brake: if buffer grows beyond hard limit, warn user and reset
-    if (totalRows > MAX_BUFFER_ROWS) {
-      console.error(`[Terminal] ⚠️ CRITICAL: Buffer exceeded ${MAX_BUFFER_ROWS} rows (${totalRows})`)
-      console.error('[Terminal] This indicates xterm scrollback is not working properly')
-      console.error('[Terminal] Resetting terminal to prevent crash...')
+    // CRITICAL: Force buffer reset if coordinates are broken
+    if (totalRows > MAX_BUFFER_ROWS || baseY > MAX_BUFFER_ROWS) {
+      console.error(`[Terminal] ⚠️ CRITICAL: Buffer corruption detected!`)
+      console.error(`[Terminal] totalRows: ${totalRows}, baseY: ${baseY}`)
+      console.error(`[Terminal] Xterm scrollback is NOT working - forcing buffer clear`)
 
-      // Instead of clearing, just disable the output buffer temporarily
-      // and let xterm catch up
+      // Pause output
       if (outputBuffer) {
-        console.log('[Terminal] Pausing output buffer to allow xterm to catch up')
         outputBuffer.pause()
-        setTimeout(() => {
-          outputBuffer?.resume()
-          console.log('[Terminal] Resumed output buffer')
-        }, 2000)
       }
+
+      // Force clear the terminal buffer to reset coordinates
+      // This will lose history but prevents crash
+      try {
+        // Method 1: Clear scrollback
+        terminal.clear()
+
+        // Method 2: Reset the terminal completely
+        terminal.reset()
+
+        console.log('[Terminal] Terminal reset complete, coordinates should be fixed')
+        console.log('[Terminal] Buffer state after reset:', {
+          totalRows: terminal.buffer.active.baseY + terminal.buffer.active.cursorY,
+          baseY: terminal.buffer.active.baseY,
+        })
+
+        // Show warning to user
+        const warningMsg = '\r\n\x1b[33m⚠️  Terminal buffer was reset due to excessive growth\x1b[0m\r\n'
+        terminal.write(warningMsg)
+      } catch (error) {
+        console.error('[Terminal] Failed to reset:', error)
+      }
+
+      // Resume output after a delay
+      setTimeout(() => {
+        if (outputBuffer) {
+          outputBuffer.resume()
+          console.log('[Terminal] Output resumed')
+        }
+      }, 1000)
+
+      // Reset tracking
+      lastBufferSize = 0
     }
   }
 
@@ -180,11 +217,11 @@ onMounted(async () => {
     checkAndTrimBuffer() // Prevent infinite buffer growth
   })
 
-  // 初始化输出缓冲器
+  // 初始化输出缓冲器（减少批次大小防止 buffer 增长）
   outputBuffer = useOutputBuffer(terminal, {
-    batchInterval: 16, // ~60fps
-    maxBufferSize: 1024 * 1024, // 1MB
-    maxBatchSize: 64 * 1024, // 64KB per batch
+    batchInterval: 32, // 降低到 ~30fps，给 xterm 更多时间处理
+    maxBufferSize: 512 * 1024, // 减少到 512KB（之前 1MB 太大）
+    maxBatchSize: 16 * 1024, // 减少到 16KB（之前 64KB 太大）
     enabled: true, // 启用输出节流
   })
 
