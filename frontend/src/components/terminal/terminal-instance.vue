@@ -111,9 +111,13 @@ onMounted(async () => {
 
   // Watch for font size changes
   watch(() => store.fontSize, (newSize) => {
-    if (terminal) {
+    if (terminal && fitAddon && !isUnmounting) {
       terminal.options.fontSize = newSize
-      fitAddon?.fit()
+      try {
+        fitAddon.fit()
+      } catch (error) {
+        console.warn('[Terminal] Font size fit failed:', error)
+      }
     }
   })
 
@@ -142,8 +146,18 @@ onMounted(async () => {
     enabled: true, // 启用输出节流
   })
 
-  // Fit terminal to container
-  fitAddon.fit()
+  // Wait for terminal renderer to be fully initialized before fitting
+  // This prevents "Cannot read properties of undefined" errors
+  await new Promise(resolve => setTimeout(resolve, 0))
+
+  // Fit terminal to container (only after renderer is ready)
+  if (fitAddon && terminal && !isUnmounting) {
+    try {
+      fitAddon.fit()
+    } catch (error) {
+      console.warn('[Terminal] Initial fit failed, will retry on resize:', error)
+    }
+  }
 
   // Handle user input
   terminal.onData((data) => {
@@ -238,30 +252,37 @@ onMounted(async () => {
 
     // Use requestAnimationFrame to batch resize operations
     resizeAnimationFrame = requestAnimationFrame(() => {
-      if (isUnmounting || !fitAddon) return
+      // Guard: check all prerequisites before attempting resize
+      if (isUnmounting || !fitAddon || !terminal) return
 
-      // Get proposed dimensions before fitting
-      const proposedDims = fitAddon.proposeDimensions()
-      if (!proposedDims) return
+      try {
+        // Get proposed dimensions before fitting
+        const proposedDims = fitAddon.proposeDimensions()
+        if (!proposedDims) return
 
-      // Check if dimensions actually changed
-      const dimsChanged =
-        !lastKnownDimensions ||
-        lastKnownDimensions.cols !== proposedDims.cols ||
-        lastKnownDimensions.rows !== proposedDims.rows
+        // Check if dimensions actually changed
+        const dimsChanged =
+          !lastKnownDimensions ||
+          lastKnownDimensions.cols !== proposedDims.cols ||
+          lastKnownDimensions.rows !== proposedDims.rows
 
-      if (dimsChanged) {
-        // Update last known dimensions
-        lastKnownDimensions = {
-          cols: proposedDims.cols,
-          rows: proposedDims.rows,
+        if (dimsChanged) {
+          // Update last known dimensions
+          lastKnownDimensions = {
+            cols: proposedDims.cols,
+            rows: proposedDims.rows,
+          }
+
+          // Fit the terminal to new dimensions
+          fitAddon.fit()
+
+          // Debounce the PTY resize call
+          debouncedResize(proposedDims.cols, proposedDims.rows)
         }
-
-        // Fit the terminal to new dimensions
-        fitAddon.fit()
-
-        // Debounce the PTY resize call
-        debouncedResize(proposedDims.cols, proposedDims.rows)
+      } catch (error) {
+        // Catch renderer initialization errors gracefully
+        // This can happen during split pane creation before terminal is fully ready
+        console.warn('[Terminal] Resize failed (terminal may not be ready):', error)
       }
     }) as unknown as number
   })
