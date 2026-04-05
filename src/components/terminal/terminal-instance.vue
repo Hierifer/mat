@@ -435,14 +435,28 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
 .terminal-container {
+  position: absolute;
+  inset: 0;
+  padding: 8px;
+  padding-bottom: 32px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+:deep(.xterm) {
   width: 100%;
   height: 100%;
-  padding: 8px;
-  padding-bottom: 32px; /* Ensure space at bottom */
-  box-sizing: border-box;
+}
+
+:deep(.xterm-viewport) {
+  overflow-y: scroll !important;
+}
+
+:deep(.xterm-screen) {
   overflow: hidden;
 }
 
