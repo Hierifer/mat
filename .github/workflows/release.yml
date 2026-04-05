@@ -14,34 +14,28 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            target: 'universal-apple-darwin'
+            args: '--target universal-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
           - platform: 'ubuntu-latest'
-            target: 'x86_64-unknown-linux-gnu'
+            args: '--target x86_64-unknown-linux-gnu'
+            rust-targets: 'x86_64-unknown-linux-gnu'
           - platform: 'windows-latest'
-            target: 'x86_64-pc-windows-msvc'
+            args: '--target x86_64-pc-windows-msvc'
+            rust-targets: 'x86_64-pc-windows-msvc'
 
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install Rust (non-macOS)
-        if: matrix.platform != 'macos-latest'
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
-
-      - name: Install Rust (macOS)
-        if: matrix.platform == 'macos-latest'
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.rust-targets }}
 
       - name: Install dependencies (Ubuntu)
         if: matrix.platform == 'ubuntu-latest'
@@ -49,143 +43,49 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
 
-      - name: Import Apple Certificate (macOS)
+      - name: Import Apple Certificate
         if: matrix.platform == 'macos-latest'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          # Create variables
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          # Import certificate from secrets
           echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $CERTIFICATE_PATH
-
-          # Create temporary keychain
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # Import certificate to keychain
           security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
-
-          # Allow codesign to access the certificate
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
       - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm install
+        run: npm install
 
-      - name: Check signing configuration
-        run: |
-          echo "Checking Tauri signing configuration..."
-          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "✅ TAURI_SIGNING_PRIVATE_KEY is set (${#TAURI_SIGNING_PRIVATE_KEY} chars)"
-          else
-            echo "❌ TAURI_SIGNING_PRIVATE_KEY is NOT set - updater artifacts will NOT be generated!"
-          fi
-          if [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
-            echo "✅ TAURI_SIGNING_PRIVATE_KEY_PASSWORD is set"
-          else
-            echo "❌ TAURI_SIGNING_PRIVATE_KEY_PASSWORD is NOT set - updater artifacts will NOT be generated!"
-          fi
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-      - name: Build and sign application
-        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          cd frontend
-          npm run tauri build -- --target ${{ matrix.target }}
+          WHISPER_DONT_GENERATE_BINDINGS: '1'
+          WHISPER_NO_AVX: '1'
+          WHISPER_NO_AVX2: '1'
+          WHISPER_NO_FMA: '1'
+          WHISPER_NO_F16C: '1'
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'mat v__VERSION__'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+          updaterJsonKeepUniversal: true
 
-      - name: List generated files
-        run: |
-          echo "=== Generated bundle files ==="
-          find frontend/src-tauri/target/${{ matrix.target }}/release/bundle -type f | sort
-          echo "=== Checking for latest.json ==="
-          find frontend/src-tauri/target/${{ matrix.target }}/release/bundle -name "latest.json" -type f || echo "⚠️ latest.json NOT FOUND"
-
-      - name: Notarize macOS app (macOS)
-        if: matrix.platform == 'macos-latest'
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          # Find the .app bundle
-          APP_PATH=$(find frontend/src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" | head -n 1)
-
-          if [ -n "$APP_PATH" ]; then
-            echo "Notarizing app at: $APP_PATH"
-
-            # Create a zip for notarization
-            ditto -c -k --keepParent "$APP_PATH" "$APP_PATH.zip"
-
-            # Submit for notarization
-            xcrun notarytool submit "$APP_PATH.zip" \
-              --apple-id "$APPLE_ID" \
-              --password "$APPLE_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --wait
-
-            # Staple the notarization ticket
-            xcrun stapler staple "$APP_PATH"
-
-            echo "Notarization complete"
-          fi
-
-      - name: Clean up keychain (macOS)
+      - name: Clean up keychain
         if: always() && matrix.platform == 'macos-latest'
-        run: |
-          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
-
-      - name: Upload Release Assets (macOS)
-        if: matrix.platform == 'macos-latest'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz.sig
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/latest.json
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-
-      - name: Upload Release Assets (Linux)
-        if: matrix.platform == 'ubuntu-latest'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage.tar.gz
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage.tar.gz.sig
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/latest.json
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-
-      - name: Upload Release Assets (Windows)
-        if: matrix.platform == 'windows-latest'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi.zip
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi.zip.sig
-            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/**/latest.json
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+        run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
