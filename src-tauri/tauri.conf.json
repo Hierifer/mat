@@ -34,6 +34,9 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "copyright": "Copyright © 2024 Hierifer. All rights reserved.",
+    "shortDescription": "A modern terminal emulator built with Tauri and Vue.",
+    "longDescription": "mat is a cross-platform terminal emulator featuring split panes, tab management, voice input, and auto-update support.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -51,11 +54,23 @@
       "providerShortName": null,
       "signingIdentity": "-"
     },
+    "linux": {
+      "deb": {
+        "copyright": "Copyright © 2024 Hierifer. All rights reserved.",
+        "files": {}
+      }
+    },
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper"
       },
-      "allowDowngrades": true
+      "allowDowngrades": true,
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "language": 1033
+      }
     }
   },
   "plugins": {
