@@ -1,115 +1,268 @@
-# Terminal Emulator
+# MAT - Modern Terminal Emulator
 
-一个基于 Tauri + Vue 3 构建的现代化终端模拟器，支持 PTY 会话管理和分屏功能。
+A modern, cross-platform terminal emulator built with Tauri, Vue 3, and Rust. Features iTerm2-inspired split panes, multi-tab support, and native performance.
 
-![License](https://img.shields.io/badge/license-待定-blue.svg)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
+![Platform Support](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## 特性
+## ✨ Features
 
-- 🚀 基于 Tauri 2 的原生性能
-- 💻 使用 xterm.js 实现的完整终端模拟
-- 🎨 VS Code 风格的现代化主题
-- 📦 轻量级桌面应用
-- 🔧 TypeScript + Rust 全栈类型安全
-- 🎯 PTY 会话管理
-- 📐 分屏布局支持（开发中）
+### Core Functionality
+- ✅ **True PTY Support** - Full pseudo-terminal implementation with proper resize handling
+- ✅ **Multi-Tab Interface** - Create unlimited terminal tabs with independent sessions
+- ✅ **Split Panes** - Horizontal and vertical splits for multi-terminal workflows
+- ✅ **Cross-Platform** - Native builds for macOS, Linux, and Windows
+- ✅ **Platform-Adaptive UI** - Window controls match platform conventions
 
-## 技术栈
+### Terminal Features
+- 🎨 XTerm.js rendering with 256-color support
+- 📁 Working directory display and navigation
+- ⌨️ Comprehensive keyboard shortcuts
+- 🔄 Session persistence across tab switches
+- 📊 Terminal history preservation
 
-### 前端
-- Vue 3 + TypeScript
-- xterm.js (终端渲染)
-- Pinia (状态管理)
-- Tailwind CSS
-- Vite
+### Platform-Specific Features
 
-### 后端
-- Tauri 2
-- Rust
-- portable-pty (PTY 支持)
-- tokio (异步运行时)
+#### macOS
+- Native traffic light window controls (Red/Yellow/Green)
+- Universal binary support (Intel + Apple Silicon)
+- Drag-to-move window from tab bar
 
-## 快速开始
+#### Linux
+- GTK-based window decorations
+- Supports both Wayland and X11
+- Distribution-agnostic AppImage builds
 
-### 前置要求
+#### Windows
+- Native Win32 window controls
+- WebView2 integration
+- Standard Windows installer (.msi)
 
-- [Bun](https://bun.sh/) 或 Node.js
-- [Rust](https://www.rust-lang.org/) (最新稳定版)
-- [Tauri 环境要求](https://tauri.app/v2/guides/getting-started/prerequisites/)
+## 🚀 Quick Start
 
-### 安装
+### Prerequisites
+
+- **Node.js** 18+ or **Bun**
+- **Rust** 1.70+ ([Install](https://rustup.rs/))
+- Platform-specific dependencies (see [BUILD.md](BUILD.md))
+
+### Development
 
 ```bash
-cd frontend
+# Install dependencies
 bun install
+
+# Run in development mode
+bun run tauri:dev
 ```
 
-### 开发
+### Building
 
 ```bash
-bun run dev
+# Build for current platform
+bun run tauri:build
+
+# Platform-specific builds
+bun run build:mac      # macOS universal binary
+bun run build:linux    # Linux (x86_64)
+bun run build:windows  # Windows (x86_64)
 ```
 
-这将启动 Vite 开发服务器和 Tauri 应用。
+For detailed build instructions and cross-compilation, see [BUILD.md](BUILD.md).
 
-### 构建
+## ⌨️ Keyboard Shortcuts
+
+### Tabs
+- `Cmd/Ctrl + T` - New tab
+- `Cmd/Ctrl + W` - Close current tab
+- `Cmd/Ctrl + Shift + W` - Close all tabs
+- `Cmd/Ctrl + 1-9` - Switch to tab 1-9
+
+### Panes
+- `Cmd/Ctrl + D` - Split horizontal
+- `Cmd/Ctrl + Shift + D` - Split vertical
+- `Cmd/Ctrl + W` - Close current pane (when multiple panes exist)
+
+### Window
+- `Cmd/Ctrl + M` - Minimize window
+- `Cmd/Ctrl + Q` - Quit application
+
+## 🏗️ Architecture
+
+### Technology Stack
+
+**Frontend:**
+- Vue 3 + TypeScript
+- Pinia (state management)
+- XTerm.js (terminal rendering)
+- Vite (build tool)
+- Tailwind CSS
+
+**Backend:**
+- Rust + Tokio (async runtime)
+- Tauri 2.x (application framework)
+- portable-pty (cross-platform PTY)
+
+### Project Structure
+
+```
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── layout/          # Tab bar, split container
+│   │   └── terminal/        # Terminal instance, pane toolbar
+│   ├── composables/         # Vue composables
+│   │   ├── use-pty-session.ts
+│   │   ├── use-keyboard-shortcuts.ts
+│   │   └── use-platform.ts
+│   ├── stores/
+│   │   └── terminal-store.ts
+│   └── App.vue
+├── src-tauri/
+│   ├── src/
+│   │   ├── pty/
+│   │   │   ├── manager.rs   # PTY session management
+│   │   │   ├── commands.rs  # Tauri commands
+│   │   │   └── shell.rs     # Cross-platform shell detection
+│   │   └── lib.rs
+│   └── Cargo.toml
+└── BUILD.md
+```
+
+## 🔧 Configuration
+
+### Shell Detection
+
+The terminal automatically detects and uses the appropriate shell:
+
+- **macOS**: `/bin/zsh` (default), falls back to `/bin/bash`
+- **Linux**: `/bin/bash` (default), falls back to `/bin/sh`
+- **Windows**: `powershell.exe`
+
+Override with `$SHELL` environment variable:
 
 ```bash
-bun run build
+SHELL=/bin/fish bun run tauri:dev
 ```
 
-生成的应用位于 `frontend/src-tauri/target/release/`
+### Working Directory Tracking
 
-## 项目结构
+To enable automatic directory display, add to your shell config:
 
-```
-terminal-emulator/
-└── frontend/
-    ├── src/                 # Vue 前端
-    │   ├── components/      # Vue 组件
-    │   ├── composables/     # 可复用逻辑
-    │   ├── stores/          # Pinia stores
-    │   └── App.vue
-    └── src-tauri/           # Rust 后端
-        └── src/
-            └── pty/         # PTY 管理模块
+**Zsh** (`~/.zshrc`):
+```zsh
+precmd() { print -Pn "\e]7;file://${HOST}${PWD}\e\\" }
 ```
 
-## 文档
+**Bash** (`~/.bashrc`):
+```bash
+PROMPT_COMMAND='echo -ne "\e]7;file://${HOSTNAME}${PWD}\e\\"'
+```
 
-详细的项目文档请查看 [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)
+## 📦 Distribution
 
-包含内容：
-- 完整的架构说明
-- 核心模块详解
-- 数据流图
-- 开发指南
-- API 参考
-- 常见问题
+### macOS
+- **Format**: `.dmg` with drag-to-Applications
+- **Architectures**: Universal (x86_64 + arm64)
+- **Minimum Version**: macOS 10.15+
 
-## 开发路线图
+### Linux
+- **Formats**: `.deb`, `.AppImage`
+- **Architectures**: x86_64, aarch64
+- **Dependencies**: Listed in BUILD.md
 
-- [x] 基础终端功能
-- [x] PTY 会话管理
-- [x] 终端主题
-- [x] 自动调整大小
-- [ ] PTY resize 完整实现
-- [ ] 分屏功能
-- [ ] 多标签页 UI
-- [ ] 快捷键支持
-- [ ] 跨平台 Shell 支持
-- [ ] 配置文件
-- [ ] 插件系统
+### Windows
+- **Format**: `.msi` installer
+- **Architectures**: x86_64
+- **Requirements**: Windows 10+ with WebView2
 
-## 贡献
+## 🛠️ Development
 
-欢迎提交 Issue 和 Pull Request！
+### Running Tests
 
-## 许可证
+```bash
+# Rust tests
+cd src-tauri && cargo test
 
-待定
+# Frontend tests
+bun test
+```
+
+### Code Quality
+
+```bash
+# Rust linting
+cargo clippy
+
+# Frontend linting
+bun run lint
+```
+
+### Debug Mode
+
+Enable verbose logging:
+
+```bash
+RUST_LOG=debug bun run tauri:dev
+```
+
+## 🐛 Troubleshooting
+
+### Session Lost on Tab Switch
+
+**Fixed**: Sessions now persist across tab switches. Terminals use `v-show` instead of `v-if` to preserve XTerm.js state.
+
+### Window Controls Not Showing
+
+Check platform detection:
+```typescript
+import { usePlatform } from '@/composables/use-platform'
+const { platform, isMacOS } = usePlatform()
+console.log('Current platform:', platform.value)
+```
+
+### PTY Resize Not Working
+
+Ensure `portable-pty` version is 0.8+:
+```bash
+cd src-tauri && cargo update -p portable-pty
+```
+
+For more issues, see [BUILD.md](BUILD.md#troubleshooting).
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Test on your target platform
+4. Submit a pull request
+
+### Development Workflow
+
+1. Make changes
+2. Test with `bun run tauri:dev`
+3. Build with `bun run tauri:build`
+4. Test the bundled app
+
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+## 🙏 Acknowledgments
+
+- [Tauri](https://tauri.app/) - Application framework
+- [XTerm.js](https://xtermjs.org/) - Terminal emulator
+- [portable-pty](https://docs.rs/portable-pty/) - PTY implementation
+- [Vue.js](https://vuejs.org/) - Frontend framework
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/hierifer/terminal-emulator/issues)
+- **Documentation**: [BUILD.md](BUILD.md)
+- **Discussions**: [GitHub Discussions](https://github.com/hierifer/terminal-emulator/discussions)
 
 ---
 
-使用 ❤️ 和 Rust 构建
+Made with ❤️ by Hierifer
