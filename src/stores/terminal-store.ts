@@ -403,6 +403,14 @@ export const useTerminalStore = defineStore("terminal", {
       return false;
     },
 
+    // Update sizes of children in a split node
+    updateChildSizes(parentNode: SplitNode, sizes: number[]) {
+      if (!parentNode.children || parentNode.children.length !== sizes.length) return
+      parentNode.children.forEach((child, i) => {
+        child.size = sizes[i]
+      })
+    },
+
     // ============================================================================
     // tmux Actions
     // ============================================================================

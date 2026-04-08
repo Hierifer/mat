@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { SplitNode } from '@/stores/terminal-store'
 import { useTerminalStore } from '@/stores/terminal-store'
 import TerminalInstance from '@/components/terminal/terminal-instance.vue'
@@ -23,17 +23,74 @@ const handlePaneClick = () => {
   }
 }
 
+// Dragging state
+const containerRef = ref<HTMLElement | null>(null)
+const isDragging = ref(false)
+const draggingIndex = ref(-1)
+
+const startDrag = (e: MouseEvent, index: number) => {
+  e.preventDefault()
+  isDragging.value = true
+  draggingIndex.value = index
+
+  const children = props.node.children!
+  const sizes = children.map(c => c.size ?? (100 / children.length))
+
+  const container = containerRef.value!
+  const containerRect = container.getBoundingClientRect()
+  const isH = isHorizontal.value
+
+  const totalSize = isH ? containerRect.width : containerRect.height
+  const startPos = isH ? e.clientX : e.clientY
+
+  // Sum of sizes before dragging index + 1
+  const leftSizeAtStart = sizes[index]
+  const rightSizeAtStart = sizes[index + 1]
+  const combinedSize = leftSizeAtStart + rightSizeAtStart
+
+  const onMouseMove = (moveEvent: MouseEvent) => {
+    const currentPos = isH ? moveEvent.clientX : moveEvent.clientY
+    const delta = currentPos - startPos
+    const deltaPercent = (delta / totalSize) * 100
+
+    const minSize = 10 // minimum 10%
+    const newLeft = Math.min(combinedSize - minSize, Math.max(minSize, leftSizeAtStart + deltaPercent))
+    const newRight = combinedSize - newLeft
+
+    const newSizes = [...sizes]
+    newSizes[index] = newLeft
+    newSizes[index + 1] = newRight
+    store.updateChildSizes(props.node, newSizes)
+  }
+
+  const onMouseUp = () => {
+    isDragging.value = false
+    draggingIndex.value = -1
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseup', onMouseUp)
+  }
+
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
+}
+
 const gridStyle = computed(() => {
+  const children = props.node.children
+  if (!children) return { height: '100%' }
+
+  // Build track sizes with divider gaps (4px each)
+  const tracks = children.map(c => `${c.size ?? (100 / children.length)}fr`).join(' 4px ')
+
   if (isHorizontal.value) {
     return {
       display: 'grid',
-      gridTemplateColumns: props.node.children?.map(c => `${c.size || 50}%`).join(' '),
+      gridTemplateColumns: tracks,
       height: '100%',
     }
   } else if (isVertical.value) {
     return {
       display: 'grid',
-      gridTemplateRows: props.node.children?.map(c => `${c.size || 50}%`).join(' '),
+      gridTemplateRows: tracks,
       height: '100%',
     }
   }
@@ -59,12 +116,17 @@ const gridStyle = computed(() => {
     </div>
   </div>
 
-  <div v-else :style="gridStyle" class="split-container">
-    <split-container
-      v-for="child in node.children"
-      :key="child.paneId || child.type + '_' + (child.children?.map(c => c.paneId).join('_') || Math.random())"
-      :node="child"
-    />
+  <div v-else ref="containerRef" :style="gridStyle" class="split-container" :class="{ 'is-dragging': isDragging }">
+    <template v-for="(child, index) in node.children" :key="child.paneId || child.type + '_' + index">
+      <split-container :node="child" />
+      <!-- Divider between panes (not after the last one) -->
+      <div
+        v-if="index < (node.children?.length ?? 0) - 1"
+        class="divider"
+        :class="isHorizontal ? 'divider-h' : 'divider-v'"
+        @mousedown="startDrag($event, index)"
+      />
+    </template>
   </div>
 </template>
 
@@ -76,7 +138,7 @@ const gridStyle = computed(() => {
   background: #1e1e1e;
   border: 1px solid #333;
   overflow: hidden;
-  transition: all 0.2s ease;
+  transition: filter 0.2s ease, border-color 0.2s ease;
   cursor: pointer;
 }
 
@@ -95,6 +157,33 @@ const gridStyle = computed(() => {
 }
 
 .split-container {
-  gap: 4px;
+  height: 100%;
+}
+
+.split-container.is-dragging {
+  user-select: none;
+}
+
+.divider {
+  background: #2d2d2d;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.divider:hover,
+.split-container.is-dragging .divider {
+  background: #007acc;
+}
+
+.divider-h {
+  cursor: col-resize;
+  width: 4px;
+  height: 100%;
+}
+
+.divider-v {
+  cursor: row-resize;
+  height: 4px;
+  width: 100%;
 }
 </style>
