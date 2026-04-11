@@ -58,8 +58,8 @@ pub fn run() {
                 .text("toggle_fullscreen", "Toggle Fullscreen")
                 .build()?;
 
-            let mat_menu = SubmenuBuilder::new(app, "Mat")
-                .text("about", "About Mat")
+            let mat_menu = SubmenuBuilder::new(app, "Materm")
+                .text("about", "About Materm")
                 .separator()
                 .text("check_updates", "Check for Updates...")
                 .text("settings", "Settings...")

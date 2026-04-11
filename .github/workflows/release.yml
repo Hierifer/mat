@@ -88,7 +88,7 @@ jobs:
           WHISPER_NO_F16C: '1'
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'mat v__VERSION__'
+          releaseName: 'Materm v__VERSION__'
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

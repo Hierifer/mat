@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mat",
+  "productName": "Materm",
   "version": "0.2.1",
   "identifier": "com.hierifer.mat",
   "build": {
@@ -36,7 +36,7 @@
     "createUpdaterArtifacts": true,
     "copyright": "Copyright © 2024 Hierifer. All rights reserved.",
     "shortDescription": "A modern terminal emulator built with Tauri and Vue.",
-    "longDescription": "mat is a cross-platform terminal emulator featuring split panes, tab management, voice input, and auto-update support.",
+    "longDescription": "Materm is a cross-platform terminal emulator featuring split panes, tab management, voice input, and auto-update support.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

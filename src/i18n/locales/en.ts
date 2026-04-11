@@ -48,7 +48,7 @@ export default {
     noSessions: 'No terminal sessions',
   },
   menu: {
-    about: 'About Mat',
+    about: 'About Materm',
     checkUpdates: 'Check for Updates...',
     settings: 'Settings...',
     closeTab: 'Close Tab',
@@ -71,7 +71,7 @@ export default {
     updateAvailableDesc: 'Click update dialog to see details',
     updateAvailableStartup: 'New version available, click to view details',
     alreadyLatest: 'Already Up to Date',
-    alreadyLatestDesc: 'You are using the latest version of Mat Terminal',
+    alreadyLatestDesc: 'You are using the latest version of Materm',
     claudeTaskComplete: 'Claude Task Complete',
     commandCompleted: 'Command execution completed',
   },

@@ -48,7 +48,7 @@ export default {
     noSessions: '无终端会话',
   },
   menu: {
-    about: '关于 Mat',
+    about: '关于 Materm',
     checkUpdates: '检查更新...',
     settings: '设置...',
     closeTab: '关闭标签页',
@@ -71,7 +71,7 @@ export default {
     updateAvailableDesc: '点击更新对话框查看详情',
     updateAvailableStartup: '有新版本可用，点击查看更新详情',
     alreadyLatest: '已是最新版本',
-    alreadyLatestDesc: '您正在使用最新版本的 Mat Terminal',
+    alreadyLatestDesc: '您正在使用最新版本的 Materm',
     claudeTaskComplete: 'Claude 任务完成',
     commandCompleted: '命令执行完成',
   },

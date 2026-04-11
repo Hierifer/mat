@@ -1,12 +1,12 @@
 [package]
-name = "mat"
+name = "materm"
 version = "0.1.19"
 description = "Modern terminal emulator with iTerm2-style features"
 authors = ["Hierifer"]
 edition = "2021"
 
 [lib]
-name = "mat_lib"
+name = "materm_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
