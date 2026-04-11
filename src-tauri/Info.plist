@@ -2,9 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>NSMicrophoneUsageDescription</key>
-  <string>Mat Terminal needs access to your microphone for voice-to-text input functionality.</string>
-  <key>NSSpeechRecognitionUsageDescription</key>
-  <string>Mat Terminal needs speech recognition to convert voice to text for terminal input.</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
 </dict>
 </plist>
