@@ -56,7 +56,6 @@
     },
     "linux": {
       "deb": {
-        "copyright": "Copyright © 2024 Hierifer. All rights reserved.",
         "files": {}
       }
     },
@@ -69,7 +68,7 @@
         "language": "en-US"
       },
       "nsis": {
-        "language": 1033
+        "languages": ["English"]
       }
     }
   },
