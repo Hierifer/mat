@@ -2,6 +2,7 @@
 import { computed, ref, nextTick, watch } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { usePtySession } from '@/composables/use-pty-session'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   paneId: string
@@ -11,6 +12,7 @@ const props = defineProps<{
 
 const store = useTerminalStore()
 const { write } = usePtySession(props.sessionId)
+const { t } = useI18n()
 
 const isActive = computed(() => store.activePaneId === props.paneId)
 
@@ -99,21 +101,21 @@ const handleKeydown = (e: KeyboardEvent) => {
     <div class="toolbar-actions">
       <button
         @click="handleSplitHorizontal"
-        title="Split Horizontal"
+        :title="t('paneToolbar.splitHorizontal')"
         class="toolbar-btn"
       >
         ⬌
       </button>
       <button
         @click="handleSplitVertical"
-        title="Split Vertical"
+        :title="t('paneToolbar.splitVertical')"
         class="toolbar-btn"
       >
         ⬍
       </button>
       <button
         @click="handleClose"
-        title="Close Pane"
+        :title="t('paneToolbar.closePane')"
         class="toolbar-btn close-btn"
       >
         ✕

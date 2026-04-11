@@ -2,8 +2,10 @@
 import { useTerminalStore } from '@/stores/terminal-store'
 import { ref, computed, onMounted } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
+import { useI18n } from 'vue-i18n'
 
 const store = useTerminalStore()
+const { t } = useI18n()
 const version = ref('0.1.17')
 const currentYear = computed(() => new Date().getFullYear())
 
@@ -30,22 +32,22 @@ onMounted(async () => {
 
       <div class="about-content">
         <p class="app-description">
-          Modern terminal emulator with iTerm2-style features
+          {{ $t('about.description') }}
         </p>
 
         <div class="about-section">
-          <h3>Features</h3>
+          <h3>{{ $t('about.featuresTitle') }}</h3>
           <ul class="feature-list">
-            <li>Split panes horizontally and vertically</li>
-            <li>Multiple tabs support</li>
-            <li>Customizable themes</li>
-            <li>Native performance with Tauri</li>
+            <li>{{ $t('about.features.splitPanes') }}</li>
+            <li>{{ $t('about.features.multipleTabs') }}</li>
+            <li>{{ $t('about.features.customThemes') }}</li>
+            <li>{{ $t('about.features.nativePerf') }}</li>
           </ul>
         </div>
 
         <div class="about-section">
-          <h3>Credits</h3>
-          <p>Built with:</p>
+          <h3>{{ $t('about.creditsTitle') }}</h3>
+          <p>{{ $t('about.builtWith') }}</p>
           <ul class="tech-list">
             <li><strong>Tauri</strong> - Cross-platform desktop framework</li>
             <li><strong>Vue.js</strong> - Progressive JavaScript framework</li>
@@ -55,7 +57,7 @@ onMounted(async () => {
         </div>
 
         <div class="about-footer">
-          <p class="copyright">© {{ currentYear }} Hierifer. All rights reserved.</p>
+          <p class="copyright">{{ $t('about.copyright', { year: currentYear }) }}</p>
         </div>
       </div>
     </div>

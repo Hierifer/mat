@@ -1,7 +1,6 @@
 import { createI18n } from 'vue-i18n'
 import en from './locales/en'
 import zhCN from './locales/zh-CN'
-import ja from './locales/ja'
 
 // 检测系统语言
 function getDefaultLocale(): string {
@@ -9,8 +8,6 @@ function getDefaultLocale(): string {
 
   if (browserLang.startsWith('zh')) {
     return 'zh-CN'
-  } else if (browserLang.startsWith('ja')) {
-    return 'ja'
   }
   return 'en'
 }
@@ -22,14 +19,12 @@ export const i18n = createI18n({
   messages: {
     en,
     'zh-CN': zhCN,
-    ja,
   },
 })
 
-export type LocaleType = 'en' | 'zh-CN' | 'ja'
+export type LocaleType = 'en' | 'zh-CN'
 
 export const availableLocales = [
   { code: 'en', name: 'English' },
   { code: 'zh-CN', name: '简体中文' },
-  { code: 'ja', name: '日本語' },
 ] as const

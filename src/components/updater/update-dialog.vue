@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useUpdater } from '@/composables/use-updater'
 import type { UpdateInfo } from '@/composables/use-updater'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   updateInfo: UpdateInfo
@@ -8,6 +9,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['close'])
 
+const { t } = useI18n()
 const { isDownloading, downloadProgress, downloadAndInstall, error } = useUpdater()
 
 const handleUpdate = async () => {
@@ -23,23 +25,23 @@ const handleUpdate = async () => {
   <div class="update-overlay" @click.self="emit('close')">
     <div class="update-dialog">
       <div class="update-header">
-        <h2>🎉 新版本可用</h2>
+        <h2>{{ $t('updater.title') }}</h2>
         <button class="close-btn" @click="emit('close')" :disabled="isDownloading">✕</button>
       </div>
 
       <div class="update-content">
         <div class="version-info">
-          <p class="version">版本 {{ updateInfo.version }}</p>
+          <p class="version">{{ $t('updater.version') }} {{ updateInfo.version }}</p>
           <p v-if="updateInfo.date" class="date">{{ updateInfo.date }}</p>
         </div>
 
         <div v-if="updateInfo.body" class="release-notes">
-          <h3>更新内容</h3>
+          <h3>{{ $t('updater.releaseNotes') }}</h3>
           <div class="notes-content" v-html="updateInfo.body"></div>
         </div>
 
         <div v-if="error" class="error-message">
-          <p>❌ 更新失败: {{ error }}</p>
+          <p>❌ {{ $t('updater.updateFailed', { error }) }}</p>
         </div>
 
         <div v-if="isDownloading" class="progress-section">
@@ -49,7 +51,7 @@ const handleUpdate = async () => {
               :style="{ width: `${downloadProgress}%` }"
             ></div>
           </div>
-          <p class="progress-text">下载中... {{ downloadProgress }}%</p>
+          <p class="progress-text">{{ $t('updater.downloadProgress', { progress: downloadProgress }) }}</p>
         </div>
       </div>
 
@@ -59,14 +61,14 @@ const handleUpdate = async () => {
           :disabled="isDownloading"
           class="btn-secondary"
         >
-          稍后提醒
+          {{ $t('updater.remindLater') }}
         </button>
         <button
           @click="handleUpdate"
           :disabled="isDownloading"
           class="btn-primary"
         >
-          {{ isDownloading ? '下载中...' : '立即更新' }}
+          {{ isDownloading ? $t('updater.downloading') : $t('updater.updateNow') }}
         </button>
       </div>
     </div>

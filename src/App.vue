@@ -7,6 +7,7 @@ import { useSpeechRecognition } from '@/composables/use-speech-recognition'
 import { useNotification } from '@/composables/use-notification'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
+import { useI18n } from 'vue-i18n'
 import TabBar from '@/components/layout/tab-bar.vue'
 import SplitContainer from '@/components/layout/split-container.vue'
 import SettingsModal from '@/components/settings/settings-modal.vue'
@@ -18,6 +19,7 @@ import SessionManager from '@/components/terminal/session-manager.vue'
 const terminalStore = useTerminalStore()
 const { updateInfo, checkForUpdates } = useUpdater()
 const showUpdateDialog = ref(false)
+const { t } = useI18n()
 
 // Notification system
 const { notifyTaskComplete, notifySuccess, notifyInfo } = useNotification()
@@ -185,19 +187,19 @@ onMounted(async () => {
         if (hasUpdate) {
           console.log('[App] Update available, showing dialog')
           showUpdateDialog.value = true
-          await notifyInfo('发现新版本', '点击更新对话框查看详情')
+          await notifyInfo(t('notifications.updateAvailable'), t('notifications.updateAvailableDesc'))
         } else {
           console.log('[App] No update available, showing alert')
           // Show "already up to date" message
-          alert('您已经在使用最新版本！')
-          await notifySuccess('已是最新版本', '您正在使用最新版本的 Mat Terminal')
+          alert(t('app.alreadyLatest'))
+          await notifySuccess(t('notifications.alreadyLatest'), t('notifications.alreadyLatestDesc'))
         }
       } catch (error) {
         console.error('[App] ========================================')
         console.error('[App] Update check FAILED with error:', error)
         console.error('[App] Error details:', JSON.stringify(error, null, 2))
         console.error('[App] ========================================')
-        alert(`检查更新失败: ${error}`)
+        alert(t('app.checkUpdateFailed', { error }))
       }
     })
     console.log('[App] ✅ menu:check-updates listener registered')
@@ -225,7 +227,7 @@ onMounted(async () => {
       if (hasUpdate) {
         console.log('[App] Update available, showing dialog')
         showUpdateDialog.value = true
-        await notifyInfo('🎉 发现新版本', '有新版本可用，点击查看更新详情')
+        await notifyInfo(t('notifications.updateAvailable'), t('notifications.updateAvailableStartup'))
       }
     } catch (error) {
       console.error('[App] Auto update check failed:', error)
@@ -278,7 +280,7 @@ onUnmounted(() => {
     </div>
 
     <div v-if="terminalStore.tabs.length === 0" class="empty-state">
-      No terminal sessions
+      {{ $t('terminal.noSessions') }}
     </div>
 
     <!-- Settings Modal -->

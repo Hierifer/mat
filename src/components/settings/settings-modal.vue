@@ -340,7 +340,7 @@ const themeColors = computed(() => {
                 background: themeColors.buttonBg,
                 borderColor: themeColors.buttonBorder,
                 color: themeColors.inputColor
-              }">Reset</button>
+              }">{{ $t('common.reset') }}</button>
             </div>
             <input
               type="range"
