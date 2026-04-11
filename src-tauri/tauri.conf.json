@@ -52,7 +52,10 @@
       "entitlements": "entitlements.plist",
       "frameworks": [],
       "providerShortName": null,
-      "signingIdentity": "-"
+      "signingIdentity": "-",
+      "infoPlist": {
+        "LSApplicationCategoryType": "public.app-category.developer-tools"
+      }
     },
     "linux": {
       "deb": {
