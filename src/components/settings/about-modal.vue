@@ -23,9 +23,9 @@ onMounted(async () => {
     <div class="about-modal">
       <div class="about-header">
         <div class="app-icon">
-          <img src="/favicon.svg" alt="Mat icon" class="app-icon-img" />
+          <img src="/favicon.svg" alt="Materm icon" class="app-icon-img" />
         </div>
-        <h1 class="app-name">Mat</h1>
+        <h1 class="app-name">Materm</h1>
         <p class="app-version">Version {{ version }}</p>
         <button class="close-btn" @click="store.toggleAbout">✕</button>
       </div>
