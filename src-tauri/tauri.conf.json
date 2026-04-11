@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Materm",
   "version": "0.2.1",
-  "identifier": "com.hierifer.mat",
+  "identifier": "com.neohex.mat",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5178",
