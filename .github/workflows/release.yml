@@ -14,7 +14,7 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target universal-apple-darwin --bundles app'
+            args: '--target universal-apple-darwin'
             rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
           - platform: 'ubuntu-latest'
             args: '--target x86_64-unknown-linux-gnu'
@@ -63,6 +63,10 @@ jobs:
           security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+      - name: Install create-dmg (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: brew install create-dmg
 
       - name: Install frontend dependencies
         run: npm install
