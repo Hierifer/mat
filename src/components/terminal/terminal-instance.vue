@@ -8,6 +8,7 @@ import { usePtySession } from '@/composables/use-pty-session'
 import { useTerminalStore, type SplitNode } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
 import { useOutputBuffer } from '@/composables/use-output-buffer'
+import { useClaudeStatus } from '@/composables/use-claude-status'
 
 const props = defineProps<{
   sessionId: string
@@ -27,7 +28,8 @@ let lastKnownDimensions: { cols: number; rows: number } | null = null
 
 const store = useTerminalStore()
 const { connect, write, resize, isConnected } = usePtySession(props.sessionId)
-const { monitorInput, processOutput, stopMonitoring } = useCommandMonitor()
+const { monitorInput, processOutput, stopMonitoring, isClaudeCommand } = useCommandMonitor()
+const claudeStatus = useClaudeStatus()
 
 // Buffer to accumulate input for command detection
 let inputBuffer = ''
@@ -247,6 +249,9 @@ onMounted(async () => {
       // Enter key pressed - check if it's a Claude command
       if (inputBuffer.trim()) {
         monitorInput(props.sessionId, inputBuffer.trim())
+        if (isClaudeCommand(inputBuffer.trim())) {
+          claudeStatus.startSession(props.sessionId)
+        }
       }
       inputBuffer = ''
     } else if (data === '\x7f' || data === '\b') {
@@ -284,6 +289,7 @@ onMounted(async () => {
     // Monitor output for command completion
     const outputText = new TextDecoder().decode(data)
     processOutput(props.sessionId, outputText)
+    claudeStatus.processOutput(props.sessionId, outputText)
   })
 
   // Watch for tab switches - if no data received, trigger refresh
@@ -389,6 +395,7 @@ onUnmounted(() => {
 
   // Stop monitoring this session
   stopMonitoring(props.sessionId)
+  claudeStatus.endSession()
 })
 </script>
 

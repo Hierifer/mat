@@ -15,6 +15,7 @@ import AboutModal from '@/components/settings/about-modal.vue'
 import UpdateDialog from '@/components/updater/update-dialog.vue'
 import SpeechIndicator from '@/components/speech/speech-indicator.vue'
 import SessionManager from '@/components/terminal/session-manager.vue'
+import ClaudeStatusBar from '@/components/claude/claude-status-bar.vue'
 
 const terminalStore = useTerminalStore()
 const { updateInfo, checkForUpdates } = useUpdater()
@@ -298,6 +299,9 @@ onUnmounted(() => {
       :update-info="updateInfo"
       @close="showUpdateDialog = false"
     />
+
+    <!-- Claude Status Bar -->
+    <claude-status-bar />
 
     <!-- Speech Recognition Indicator -->
     <speech-indicator
