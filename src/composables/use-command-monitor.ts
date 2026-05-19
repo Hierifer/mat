@@ -21,6 +21,13 @@ export function useCommandMonitor() {
     /claude-code/i,         // claude-code
   ]
 
+  // Patterns to detect Codex commands
+  const codexCommandPatterns = [
+    /codex\s+/i,            // codex command
+    /npx\s+codex/i,         // npx codex
+    /npx\s+@openai\/codex/i, // npx @openai/codex
+  ]
+
   // Patterns to detect command completion
   const completionPatterns = [
     /\$\s*$/,               // Shell prompt (bash/zsh)
@@ -44,6 +51,13 @@ export function useCommandMonitor() {
    */
   const isClaudeCommand = (line: string): boolean => {
     return claudeCommandPatterns.some(pattern => pattern.test(line))
+  }
+
+  /**
+   * Check if a line contains any AI command (Claude or Codex)
+   */
+  const isAICommand = (line: string): boolean => {
+    return isClaudeCommand(line) || codexCommandPatterns.some(pattern => pattern.test(line))
   }
 
   /**
@@ -75,11 +89,11 @@ export function useCommandMonitor() {
    * Start monitoring a command
    */
   const startMonitoring = (sessionId: string, command: string) => {
-    if (!isClaudeCommand(command)) {
+    if (!isAICommand(command)) {
       return false
     }
 
-    console.log('[CommandMonitor] Started monitoring Claude command:', command)
+    console.log('[CommandMonitor] Started monitoring AI command:', command)
 
     runningCommands.value.set(sessionId, {
       command,
@@ -106,16 +120,19 @@ export function useCommandMonitor() {
       const duration = Date.now() - running.startTime
       const durationText = formatDuration(duration)
 
-      console.log('[CommandMonitor] Claude command completed:', {
+      const isCodex = codexCommandPatterns.some(p => p.test(running.command))
+      const toolName = isCodex ? 'Codex' : 'Claude'
+
+      console.log(`[CommandMonitor] ${toolName} command completed:`, {
         command: running.command,
         duration: durationText,
         outputLines: running.outputLines.length,
       })
 
-      // Send notification only if enabled
-      if (store.enableCommandNotifications) {
+      // Send system notification only when app is in background (not focused)
+      if (store.enableCommandNotifications && !document.hasFocus()) {
         await notifyTaskComplete(
-          'Claude 任务完成',
+          `${toolName} 任务完成`,
           `命令执行完成 (用时 ${durationText})\n${truncateCommand(running.command)}`
         )
       }
@@ -129,10 +146,10 @@ export function useCommandMonitor() {
    * Monitor a line of input (when user types a command)
    */
   const monitorInput = (sessionId: string, input: string) => {
-    // Check if this is a Claude command
+    // Check if this is an AI command (Claude or Codex)
     const trimmedInput = input.trim()
 
-    if (trimmedInput && isClaudeCommand(trimmedInput)) {
+    if (trimmedInput && isAICommand(trimmedInput)) {
       startMonitoring(sessionId, trimmedInput)
     }
   }
@@ -177,5 +194,6 @@ export function useCommandMonitor() {
     processOutput,
     stopMonitoring,
     isClaudeCommand,
+    isAICommand,
   }
 }

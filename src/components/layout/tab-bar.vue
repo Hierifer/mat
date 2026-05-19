@@ -78,7 +78,7 @@ const startEditing = (tabId: string, currentTitle: string, event: Event) => {
 
 const finishEditing = () => {
   if (editingTabId.value && editingTitle.value.trim()) {
-    store.updateTabTitle(editingTabId.value, editingTitle.value.trim())
+    store.updateTabTitle(editingTabId.value, editingTitle.value.trim(), true)
   }
   editingTabId.value = null
   editingTitle.value = ''
@@ -158,6 +158,14 @@ const handleKeydown = (e: KeyboardEvent) => {
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <path d="M8 1C7.17 1 6.5 1.67 6.5 2.5V8C6.5 8.83 7.17 9.5 8 9.5C8.83 9.5 9.5 8.83 9.5 8V2.5C9.5 1.67 8.83 1 8 1Z" fill="currentColor"/>
         <path d="M11 8C11 9.66 9.66 11 8 11C6.34 11 5 9.66 5 8H3.5C3.5 10.07 5.07 11.75 7 12.09V14H9V12.09C10.93 11.75 12.5 10.07 12.5 8H11Z" fill="currentColor"/>
+      </svg>
+    </button>
+
+    <!-- Toggle to conversation mode -->
+    <button class="layout-btn" @click="store.toggleDisplayMode()" title="Switch to conversation mode">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="1" width="5" height="14" rx="1" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="8" y="1" width="7" height="14" rx="1" stroke="currentColor" stroke-width="1.2"/>
       </svg>
     </button>
 
@@ -571,6 +579,43 @@ const handleKeydown = (e: KeyboardEvent) => {
   background: #ff4444;
   border-radius: 50%;
   border: 2px solid #1e1e1e;
+}
+
+.layout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #2d2d30;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.light-theme .layout-btn {
+  background: #e8e8e8;
+  color: #616161;
+}
+
+.layout-btn:hover {
+  background: #37373d;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+.light-theme .layout-btn:hover {
+  background: #d8d8d8;
+  border-color: #007acc;
+  color: #000000;
+}
+
+.layout-btn:active {
+  background: #007acc;
 }
 
 .settings-btn {

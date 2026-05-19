@@ -320,6 +320,37 @@ const themeColors = computed(() => {
 
         <div v-if="activeCategory === 'View'" class="settings-section">
           <div class="setting-item">
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.displayMode') }}</label>
+            <p class="setting-description" :style="{ color: themeColors.descColor, paddingLeft: 0, marginBottom: '15px' }">
+              {{ $t('settings.displayModeDesc') }}
+            </p>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input
+                  type="radio"
+                  name="displayMode"
+                  value="tabs"
+                  :checked="store.displayMode === 'tabs'"
+                  @change="store.setDisplayMode('tabs')"
+                  class="radio-input"
+                />
+                <span class="radio-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.displayModeTabs') }}</span>
+              </label>
+              <label class="radio-label">
+                <input
+                  type="radio"
+                  name="displayMode"
+                  value="conversation"
+                  :checked="store.displayMode === 'conversation'"
+                  @change="store.setDisplayMode('conversation')"
+                  class="radio-input"
+                />
+                <span class="radio-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.displayModeConversation') }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-item">
             <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.fontSize') }}</label>
             <p class="setting-description" :style="{ color: themeColors.descColor, paddingLeft: 0, marginBottom: '15px' }">
               {{ $t('settings.fontSizeDesc') }}

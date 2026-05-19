@@ -5,7 +5,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import 'xterm/css/xterm.css'
 import { usePtySession } from '@/composables/use-pty-session'
-import { useTerminalStore, type SplitNode } from '@/stores/terminal-store'
+import { useTerminalStore, type SplitNode, type TerminalTab } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
 import { useOutputBuffer } from '@/composables/use-output-buffer'
 import { useClaudeStatus } from '@/composables/use-claude-status'
@@ -35,6 +35,20 @@ const claudeStatus = useClaudeStatus()
 let inputBuffer = ''
 // Track if we've received any data
 let hasReceivedData = false
+// Track if first command auto-title has been set
+let firstCommandTitleSet = false
+
+// Helper: find the tab that contains this pane
+const findTabForPane = (): TerminalTab | undefined => {
+  return store.tabs.find(t => {
+    const findPane = (node: SplitNode): boolean => {
+      if (node.type === 'pane' && node.paneId === props.paneId) return true
+      if (node.children) return node.children.some(findPane)
+      return false
+    }
+    return findPane(t.layout)
+  })
+}
 
 // Function to parse OSC 7 (current directory) from terminal output
 const parseOSC7 = (data: Uint8Array): string | null => {
@@ -208,6 +222,17 @@ onMounted(async () => {
   terminal.loadAddon(webLinksAddon)
   terminal.open(terminalRef.value)
 
+  // Listen for OSC 0/2 title changes from programs running in terminal
+  terminal.onTitleChange((title) => {
+    if (title && props.paneId) {
+      const tab = findTabForPane()
+      if (tab && !tab.titleManuallySet) {
+        store.updateTabTitle(tab.id, title)
+        firstCommandTitleSet = true // OSC title counts as set
+      }
+    }
+  })
+
   // Listen for scroll events to show/hide scroll-to-bottom button
   terminal.onScroll(() => {
     checkScrollPosition()
@@ -246,8 +271,20 @@ onMounted(async () => {
 
     // Monitor input for command detection
     if (data === '\r' || data === '\n') {
-      // Enter key pressed - check if it's a Claude command
+      // Enter key pressed
       if (inputBuffer.trim()) {
+        // Auto-set tab title from first command if not already set
+        if (!firstCommandTitleSet && props.paneId) {
+          const tab = findTabForPane()
+          if (tab && tab.title === 'Terminal' && !tab.titleManuallySet) {
+            const cmd = inputBuffer.trim()
+            const shortTitle = cmd.length > 40 ? cmd.substring(0, 40) + '...' : cmd
+            store.updateTabTitle(tab.id, shortTitle)
+          }
+          firstCommandTitleSet = true
+        }
+
+        // Check if it's an AI command (Claude/Codex)
         monitorInput(props.sessionId, inputBuffer.trim())
         if (isClaudeCommand(inputBuffer.trim())) {
           claudeStatus.startSession(props.sessionId)

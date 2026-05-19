@@ -1,10 +1,12 @@
 import { defineStore } from 'pinia'
 import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { themes, type ITheme } from "@/settings/themes";
 
 export interface TerminalTab {
   id: string
   title: string
+  titleManuallySet?: boolean
   layout: SplitNode
   createdAt: number
 }
@@ -51,6 +53,7 @@ export const useTerminalStore = defineStore("terminal", {
     sessionMapping: {} as Record<string, string>, // paneId -> tmux session name
     autoRestoreSessions: false,
     isSessionManagerOpen: false,
+    displayMode: 'tabs' as 'tabs' | 'conversation', // 布局模式
   }),
 
   getters: {
@@ -243,30 +246,38 @@ export const useTerminalStore = defineStore("terminal", {
       }
     },
 
-    async setActiveTab(tabId: string) {
-      console.log(`[Store] Switching to tab: ${tabId}`);
-      const tab = this.tabs.find((t) => t.id === tabId);
-      if (tab) {
-        console.log(`[Store] Tab layout:`, tab.layout);
-      }
+    setActiveTab(tabId: string) {
       this.activeTabId = tabId;
 
-      // Debug: List active sessions in backend
-      try {
-        // @ts-ignore
-        if (window.__TAURI_INTERNALS__) {
-          const sessions = await invoke<string[]>("pty_list_sessions");
-          console.log(`[Store] Active backend sessions:`, sessions);
-        }
-      } catch (error) {
-        console.error("Failed to list sessions:", error);
+      const tab = this.tabs.find((t) => t.id === tabId);
+      if (tab) {
+        // Fire-and-forget: don't block UI for IPC
+        this.syncWindowTitle(tab.title);
       }
     },
 
-    updateTabTitle(tabId: string, title: string) {
+    updateTabTitle(tabId: string, title: string, manual = false) {
       const tab = this.tabs.find((t) => t.id === tabId);
       if (tab) {
         tab.title = title;
+        if (manual) {
+          tab.titleManuallySet = true;
+        }
+        // Sync OS window title if this is the active tab
+        if (tabId === this.activeTabId) {
+          this.syncWindowTitle(title);
+        }
+      }
+    },
+
+    async syncWindowTitle(title: string) {
+      try {
+        // @ts-ignore
+        if (window.__TAURI_INTERNALS__) {
+          await getCurrentWindow().setTitle(title ? `${title} - Materm` : 'Materm')
+        }
+      } catch (error) {
+        console.error('Failed to sync window title:', error)
       }
     },
 
@@ -646,6 +657,14 @@ export const useTerminalStore = defineStore("terminal", {
 
     toggleSessionManager() {
       this.isSessionManagerOpen = !this.isSessionManagerOpen;
+    },
+
+    toggleDisplayMode() {
+      this.displayMode = this.displayMode === 'tabs' ? 'conversation' : 'tabs';
+    },
+
+    setDisplayMode(mode: 'tabs' | 'conversation') {
+      this.displayMode = mode;
     },
   },
 });

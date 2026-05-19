@@ -16,6 +16,7 @@ import UpdateDialog from '@/components/updater/update-dialog.vue'
 import SpeechIndicator from '@/components/speech/speech-indicator.vue'
 import SessionManager from '@/components/terminal/session-manager.vue'
 import ClaudeStatusBar from '@/components/claude/claude-status-bar.vue'
+import ConversationSidebar from '@/components/layout/conversation-sidebar.vue'
 
 const terminalStore = useTerminalStore()
 const { updateInfo, checkForUpdates } = useUpdater()
@@ -268,21 +269,44 @@ onUnmounted(() => {
 
 <template>
   <div class="app-container">
-    <tab-bar v-if="terminalStore.tabs.length > 0" />
+    <!-- Tabs mode: standard vertical layout -->
+    <template v-if="terminalStore.displayMode === 'tabs'">
+      <tab-bar v-if="terminalStore.tabs.length > 0" />
 
-    <!-- Render all tabs but only show the active one to preserve terminal history -->
-    <div
-      v-for="tab in terminalStore.tabs"
-      :key="tab.id"
-      v-show="tab.id === terminalStore.activeTabId"
-      class="terminal-view"
-    >
-      <split-container :node="tab.layout" />
-    </div>
+      <div
+        v-for="tab in terminalStore.tabs"
+        :key="tab.id"
+        v-show="tab.id === terminalStore.activeTabId"
+        class="terminal-view"
+      >
+        <split-container :node="tab.layout" />
+      </div>
 
-    <div v-if="terminalStore.tabs.length === 0" class="empty-state">
-      {{ $t('terminal.noSessions') }}
-    </div>
+      <div v-if="terminalStore.tabs.length === 0" class="empty-state">
+        {{ $t('terminal.noSessions') }}
+      </div>
+    </template>
+
+    <!-- Conversation mode: horizontal layout with sidebar -->
+    <template v-else>
+      <div class="conversation-layout">
+        <conversation-sidebar />
+        <div class="conversation-content">
+          <div
+            v-for="tab in terminalStore.tabs"
+            :key="tab.id"
+            v-show="tab.id === terminalStore.activeTabId"
+            class="terminal-view"
+          >
+            <split-container :node="tab.layout" />
+          </div>
+
+          <div v-if="terminalStore.tabs.length === 0" class="empty-state">
+            {{ $t('terminal.noSessions') }}
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- Settings Modal -->
     <settings-modal v-if="terminalStore.isSettingsOpen" />
@@ -338,5 +362,20 @@ onUnmounted(() => {
   justify-content: center;
   font-size: 18px;
   color: #666;
+}
+
+.conversation-layout {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  overflow: hidden;
+}
+
+.conversation-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0 10px 0 0;
 }
 </style>
