@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- App Sandbox (required for App Store) -->
+    <!-- App Sandbox disabled - not needed for GitHub distribution, breaks PTY/shell -->
     <key>com.apple.security.app-sandbox</key>
-    <true/>
+    <false/>
 
     <!-- Allow the app to access the microphone -->
     <key>com.apple.security.device.audio-input</key>
@@ -21,9 +21,5 @@
     <!-- Disable library validation (needed for Tauri) -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
-
-    <!-- Allow spawning child processes (needed for terminal/PTY) -->
-    <key>com.apple.security.temporary-exception.sbpl</key>
-    <string>(allow process-fork process-exec)</string>
 </dict>
 </plist>
