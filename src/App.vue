@@ -17,10 +17,13 @@ import SpeechIndicator from '@/components/speech/speech-indicator.vue'
 import SessionManager from '@/components/terminal/session-manager.vue'
 import ClaudeStatusBar from '@/components/claude/claude-status-bar.vue'
 import ConversationSidebar from '@/components/layout/conversation-sidebar.vue'
+import WhatsNewModal from '@/components/settings/whats-new-modal.vue'
+import { getVersion } from '@tauri-apps/api/app'
 
 const terminalStore = useTerminalStore()
 const { updateInfo, checkForUpdates } = useUpdater()
 const showUpdateDialog = ref(false)
+const showWhatsNew = ref(false)
 const { t } = useI18n()
 
 // Notification system
@@ -133,6 +136,16 @@ const handleSpeechShortcut = (e: KeyboardEvent) => {
   }
 }
 
+const onWhatsNewClose = async () => {
+  showWhatsNew.value = false
+  try {
+    const currentVersion = await getVersion()
+    localStorage.setItem('materm_last_seen_version', currentVersion)
+  } catch (err) {
+    console.error('[App] Failed to save version:', err)
+  }
+}
+
 onMounted(async () => {
   console.log('App mounted, initializing...')
 
@@ -219,6 +232,17 @@ onMounted(async () => {
     console.error('[App] ❌ Failed to setup menu event listeners!')
     console.error('[App] Error:', error)
     console.error('[App] ========================================')
+  }
+
+  // Check if we should show What's New dialog
+  try {
+    const currentVersion = await getVersion()
+    const lastSeenVersion = localStorage.getItem('materm_last_seen_version')
+    if (lastSeenVersion !== currentVersion) {
+      showWhatsNew.value = true
+    }
+  } catch (err) {
+    console.error('[App] Failed to check version for What\'s New:', err)
   }
 
   // Auto-check for updates on startup (delayed 3 seconds)
@@ -313,6 +337,9 @@ onUnmounted(() => {
 
     <!-- About Modal -->
     <about-modal v-if="terminalStore.isAboutOpen" />
+
+    <!-- What's New Modal -->
+    <whats-new-modal v-if="showWhatsNew" @close="onWhatsNewClose" />
 
     <!-- Session Manager -->
     <session-manager v-if="terminalStore.isSessionManagerOpen" />

@@ -51,6 +51,11 @@ export default {
     claudeTaskComplete: 'Claudeタスク完了',
     commandCompleted: 'コマンド実行完了',
   },
+  whatsNew: {
+    title: '新着情報',
+    features: '新機能',
+    fixes: 'バグ修正',
+  },
   common: {
     close: '閉じる',
     cancel: 'キャンセル',

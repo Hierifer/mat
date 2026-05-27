@@ -89,6 +89,11 @@ export default {
     remindLater: '稍后提醒',
     updateNow: '立即更新',
   },
+  whatsNew: {
+    title: '更新内容',
+    features: '新功能',
+    fixes: '问题修复',
+  },
   about: {
     description: '现代终端模拟器，支持 iTerm2 风格特性',
     featuresTitle: '功能特性',

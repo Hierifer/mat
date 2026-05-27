@@ -89,6 +89,11 @@ export default {
     remindLater: 'Remind Later',
     updateNow: 'Update Now',
   },
+  whatsNew: {
+    title: "What's New",
+    features: 'Features',
+    fixes: 'Bug Fixes',
+  },
   about: {
     description: 'Modern terminal emulator with iTerm2-style features',
     featuresTitle: 'Features',
