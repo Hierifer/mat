@@ -99,7 +99,7 @@ const gridStyle = computed(() => {
 </script>
 
 <template>
-  <div v-if="isPane" class="pane" :class="{ dimmed: shouldDim, active: isActive }" @click="handlePaneClick">
+  <div v-if="isPane" class="pane" :class="{ dimmed: shouldDim, active: isActive }" @mousedown="handlePaneClick">
     <pane-toolbar
       v-if="node.paneId && node.sessionId"
       :pane-id="node.paneId"
