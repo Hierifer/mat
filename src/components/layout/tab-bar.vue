@@ -141,12 +141,12 @@ const handleKeydown = (e: KeyboardEvent) => {
       </div>
     </div>
 
-    <!-- Draggable spacer -->
-    <div class="drag-spacer" data-tauri-drag-region></div>
-
     <button class="new-tab-btn" @click="handleNewTab" title="New tab">
       +
     </button>
+
+    <!-- Draggable spacer -->
+    <div class="drag-spacer" data-tauri-drag-region></div>
 
     <button
       v-if="speechRecognition"
