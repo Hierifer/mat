@@ -9,6 +9,8 @@ export default {
     windowAppearance: 'Window Appearance',
     dimInactivePanes: 'Dim inactive panes',
     dimInactivePanesDesc: 'Apply grayscale effect to unfocused terminal panes',
+    inactiveBrightness: 'Inactive pane brightness',
+    inactiveBrightnessDesc: 'Lower value makes inactive panes darker',
     notifications: 'Notifications',
     enableCommandNotifications: 'Enable command completion notifications',
     enableCommandNotificationsDesc: 'Send system notifications when Claude commands finish executing',

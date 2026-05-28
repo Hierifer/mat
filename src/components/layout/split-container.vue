@@ -16,6 +16,10 @@ const isHorizontal = computed(() => props.node.type === 'horizontal')
 const isVertical = computed(() => props.node.type === 'vertical')
 const isActive = computed(() => store.activePaneId === props.node.paneId)
 const shouldDim = computed(() => store.dimInactivePanes && !isActive.value)
+const dimFilter = computed(() => {
+  const b = store.inactivePaneBrightness / 100
+  return `grayscale(0.4) brightness(${b})`
+})
 
 const handlePaneClick = () => {
   if (props.node.paneId) {
@@ -99,7 +103,7 @@ const gridStyle = computed(() => {
 </script>
 
 <template>
-  <div v-if="isPane" class="pane" :class="{ dimmed: shouldDim, active: isActive }" @mousedown="handlePaneClick">
+  <div v-if="isPane" class="pane" :class="{ active: isActive }" :style="shouldDim ? { filter: dimFilter } : {}" @mousedown="handlePaneClick">
     <pane-toolbar
       v-if="node.paneId && node.sessionId"
       :pane-id="node.paneId"
@@ -144,10 +148,6 @@ const gridStyle = computed(() => {
 
 .pane.active {
   border-color: #007acc;
-}
-
-.pane.dimmed {
-  filter: grayscale(0.4) brightness(0.85);
 }
 
 .terminal-wrapper {

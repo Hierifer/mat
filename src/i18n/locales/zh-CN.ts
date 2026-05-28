@@ -9,6 +9,8 @@ export default {
     windowAppearance: '窗口外观',
     dimInactivePanes: '未聚焦窗格变灰',
     dimInactivePanesDesc: '对未聚焦的终端窗格应用灰度效果',
+    inactiveBrightness: '未聚焦窗格亮度',
+    inactiveBrightnessDesc: '数值越低，未聚焦窗格越暗',
     notifications: '通知',
     enableCommandNotifications: '启用命令完成通知',
     enableCommandNotificationsDesc: '当 Claude 命令执行完成时发送系统通知',

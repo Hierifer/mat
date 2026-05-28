@@ -44,6 +44,7 @@ export const useTerminalStore = defineStore("terminal", {
     isSettingsOpen: false,
     isAboutOpen: false,
     dimInactivePanes: true, // 未聚焦窗格变灰功能
+    inactivePaneBrightness: 85 as number, // 未聚焦窗格亮度 (0-100)
     enableCommandNotifications: true, // Claude 命令完成通知
     fontSize: 13 as number, // 字体大小
     locale: 'zh-CN' as string, // 语言
@@ -83,6 +84,10 @@ export const useTerminalStore = defineStore("terminal", {
 
     toggleDimInactivePanes() {
       this.dimInactivePanes = !this.dimInactivePanes;
+    },
+
+    setInactivePaneBrightness(value: number) {
+      this.inactivePaneBrightness = Math.max(0, Math.min(100, Math.round(value)));
     },
 
     toggleCommandNotifications() {

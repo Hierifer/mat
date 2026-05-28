@@ -226,6 +226,24 @@ const themeColors = computed(() => {
                 {{ $t('settings.dimInactivePanesDesc') }}
               </p>
             </div>
+            <div v-if="store.dimInactivePanes" class="setting-row" style="margin-top: 15px;">
+              <label class="setting-sublabel" :style="{ color: themeColors.labelColor }">
+                {{ $t('settings.inactiveBrightness') }}
+                <span class="brightness-value" :style="{ color: themeColors.descColor }">{{ store.inactivePaneBrightness }}%</span>
+              </label>
+              <input
+                type="range"
+                min="20"
+                max="100"
+                :value="store.inactivePaneBrightness"
+                @input="store.setInactivePaneBrightness(Number(($event.target as HTMLInputElement).value))"
+                class="font-slider"
+                :style="{ background: themeColors.sliderBg }"
+              />
+              <p class="setting-description" :style="{ color: themeColors.descColor, paddingLeft: 0 }">
+                {{ $t('settings.inactiveBrightnessDesc') }}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -582,6 +600,19 @@ const themeColors = computed(() => {
   font-size: 12px;
   padding-left: 28px;
   transition: color 0.3s;
+}
+
+.setting-sublabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  transition: color 0.3s;
+}
+
+.brightness-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .radio-group {
