@@ -81,6 +81,10 @@ export default {
   },
   updater: {
     title: '🎉 新版本可用',
+    checkingTitle: '检查更新',
+    checkingDesc: '正在检查新版本...',
+    noUpdateTitle: '已是最新版本',
+    noUpdateDesc: '当前已是最新版本，无需更新。',
     version: '版本',
     releaseNotes: '更新内容',
     updateFailed: '更新失败：{error}',

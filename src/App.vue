@@ -21,7 +21,7 @@ import WhatsNewModal from '@/components/settings/whats-new-modal.vue'
 import { getVersion } from '@tauri-apps/api/app'
 
 const terminalStore = useTerminalStore()
-const { updateInfo, checkForUpdates } = useUpdater()
+const { updateInfo, isChecking, checkForUpdates } = useUpdater()
 const showUpdateDialog = ref(false)
 const showWhatsNew = ref(false)
 const { t } = useI18n()
@@ -190,31 +190,17 @@ onMounted(async () => {
 
     console.log('[App] Registering menu:check-updates listener...')
     unlistenCheckUpdates = await listen('menu:check-updates', async () => {
-      console.log('[App] ========================================')
       console.log('[App] ✅ menu:check-updates event received!')
-      console.log('[App] Manual update check triggered via menu')
-      console.log('[App] ========================================')
-      try {
-        console.log('[App] Calling checkForUpdates(false)...')
-        const hasUpdate = await checkForUpdates(false)
-        console.log('[App] checkForUpdates returned:', hasUpdate)
+      // Show dialog immediately with loading state
+      showUpdateDialog.value = true
 
+      try {
+        const hasUpdate = await checkForUpdates(false)
         if (hasUpdate) {
-          console.log('[App] Update available, showing dialog')
-          showUpdateDialog.value = true
           await notifyInfo(t('notifications.updateAvailable'), t('notifications.updateAvailableDesc'))
-        } else {
-          console.log('[App] No update available, showing alert')
-          // Show "already up to date" message
-          alert(t('app.alreadyLatest'))
-          await notifySuccess(t('notifications.alreadyLatest'), t('notifications.alreadyLatestDesc'))
         }
       } catch (error) {
-        console.error('[App] ========================================')
-        console.error('[App] Update check FAILED with error:', error)
-        console.error('[App] Error details:', JSON.stringify(error, null, 2))
-        console.error('[App] ========================================')
-        alert(t('app.checkUpdateFailed', { error }))
+        console.error('[App] Update check failed:', error)
       }
     })
     console.log('[App] ✅ menu:check-updates listener registered')
@@ -346,8 +332,9 @@ onUnmounted(() => {
 
     <!-- Update Dialog -->
     <update-dialog
-      v-if="showUpdateDialog && updateInfo"
+      v-if="showUpdateDialog"
       :update-info="updateInfo"
+      :is-checking="isChecking"
       @close="showUpdateDialog = false"
     />
 

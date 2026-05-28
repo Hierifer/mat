@@ -81,6 +81,10 @@ export default {
   },
   updater: {
     title: '🎉 New Version Available',
+    checkingTitle: 'Check for Updates',
+    checkingDesc: 'Checking for new version...',
+    noUpdateTitle: 'Up to Date',
+    noUpdateDesc: 'You are already on the latest version.',
     version: 'Version',
     releaseNotes: 'Release Notes',
     updateFailed: 'Update failed: {error}',

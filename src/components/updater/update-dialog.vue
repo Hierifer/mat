@@ -4,7 +4,8 @@ import type { UpdateInfo } from '@/composables/use-updater'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
-  updateInfo: UpdateInfo
+  updateInfo: UpdateInfo | null
+  isChecking: boolean
 }>()
 
 const emit = defineEmits(['close'])
@@ -22,14 +23,35 @@ const handleUpdate = async () => {
 </script>
 
 <template>
-  <div class="update-overlay" @click.self="emit('close')">
+  <div class="update-overlay" @click.self="!isChecking && emit('close')">
     <div class="update-dialog">
       <div class="update-header">
-        <h2>{{ $t('updater.title') }}</h2>
-        <button class="close-btn" @click="emit('close')" :disabled="isDownloading">✕</button>
+        <h2>{{ isChecking ? $t('updater.checkingTitle') : (updateInfo ? $t('updater.title') : $t('updater.noUpdateTitle')) }}</h2>
+        <button class="close-btn" @click="emit('close')" :disabled="isDownloading || isChecking">✕</button>
       </div>
 
-      <div class="update-content">
+      <!-- Checking state -->
+      <div v-if="isChecking" class="update-content">
+        <div class="checking-state">
+          <div class="spinner"></div>
+          <p class="checking-text">{{ $t('updater.checkingDesc') }}</p>
+        </div>
+      </div>
+
+      <!-- No update available -->
+      <div v-else-if="!updateInfo" class="update-content">
+        <div class="no-update-state">
+          <div class="no-update-icon">&#10003;</div>
+          <p class="no-update-text">{{ $t('updater.noUpdateDesc') }}</p>
+        </div>
+
+        <div v-if="error" class="error-message">
+          <p>{{ $t('updater.updateFailed', { error }) }}</p>
+        </div>
+      </div>
+
+      <!-- Update available -->
+      <div v-else class="update-content">
         <div class="version-info">
           <p class="version">{{ $t('updater.version') }} {{ updateInfo.version }}</p>
           <p v-if="updateInfo.date" class="date">{{ updateInfo.date }}</p>
@@ -41,7 +63,7 @@ const handleUpdate = async () => {
         </div>
 
         <div v-if="error" class="error-message">
-          <p>❌ {{ $t('updater.updateFailed', { error }) }}</p>
+          <p>{{ $t('updater.updateFailed', { error }) }}</p>
         </div>
 
         <div v-if="isDownloading" class="progress-section">
@@ -61,9 +83,10 @@ const handleUpdate = async () => {
           :disabled="isDownloading"
           class="btn-secondary"
         >
-          {{ $t('updater.remindLater') }}
+          {{ updateInfo ? $t('updater.remindLater') : $t('common.close') }}
         </button>
         <button
+          v-if="updateInfo"
           @click="handleUpdate"
           :disabled="isDownloading"
           class="btn-primary"
@@ -141,6 +164,61 @@ const handleUpdate = async () => {
   padding: 24px;
   max-height: 400px;
   overflow-y: auto;
+}
+
+/* Checking state */
+.checking-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 0;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #3e3e42;
+  border-top-color: #0078d4;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.checking-text {
+  margin: 0;
+  color: #aaa;
+  font-size: 15px;
+}
+
+/* No update state */
+.no-update-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+
+.no-update-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(82, 196, 26, 0.15);
+  color: #52c41a;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.no-update-text {
+  margin: 0;
+  color: #ccc;
+  font-size: 15px;
 }
 
 .version-info {
