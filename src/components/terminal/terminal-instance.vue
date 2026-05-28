@@ -389,17 +389,22 @@ onMounted(async () => {
           lastKnownDimensions.rows !== proposedDims.rows
 
         if (dimsChanged) {
-          // Update last known dimensions
-          lastKnownDimensions = {
-            cols: proposedDims.cols,
-            rows: proposedDims.rows,
-          }
-
           // Fit the terminal to new dimensions
           fitAddon.fit()
 
+          // Use actual terminal dimensions after fit() for PTY resize
+          // This ensures PTY and xterm agree on exact dimensions
+          const actualCols = terminal.cols
+          const actualRows = terminal.rows
+
+          // Update last known dimensions with actual values
+          lastKnownDimensions = {
+            cols: actualCols,
+            rows: actualRows,
+          }
+
           // Debounce the PTY resize call
-          debouncedResize(proposedDims.cols, proposedDims.rows)
+          debouncedResize(actualCols, actualRows)
         }
       } catch (error) {
         // Catch renderer initialization errors gracefully
@@ -486,7 +491,6 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   padding: 8px;
-  padding-bottom: 32px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -497,7 +501,7 @@ onUnmounted(() => {
 }
 
 :deep(.xterm-viewport) {
-  overflow-y: scroll !important;
+  overflow-y: auto !important;
 }
 
 :deep(.xterm-screen) {
