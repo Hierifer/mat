@@ -56,6 +56,17 @@ export default {
     features: '新機能',
     fixes: 'バグ修正',
   },
+  layout: {
+    presets: 'レイアウトプリセット',
+    dual: '左右分割',
+    triple: '3列分割',
+    quad: '4分割',
+  },
+  search: {
+    placeholder: '検索...',
+    noResults: '結果なし',
+    matchCount: '{current}/{total}',
+  },
   common: {
     close: '閉じる',
     cancel: 'キャンセル',

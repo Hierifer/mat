@@ -113,6 +113,17 @@ export default {
     builtWith: '使用以下技术构建：',
     copyright: '© {year} Hierifer. 保留所有权利。',
   },
+  layout: {
+    presets: '预制布局',
+    dual: '左右双栏',
+    triple: '左中右三栏',
+    quad: '四宫格',
+  },
+  search: {
+    placeholder: '搜索关键词...',
+    noResults: '未找到匹配',
+    matchCount: '{current}/{total}',
+  },
   paneToolbar: {
     splitHorizontal: '水平分割',
     splitVertical: '垂直分割',

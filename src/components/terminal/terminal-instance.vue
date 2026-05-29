@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { Terminal } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { SearchAddon } from '@xterm/addon-search'
 import 'xterm/css/xterm.css'
 import { usePtySession } from '@/composables/use-pty-session'
 import { useTerminalStore, type SplitNode, type TerminalTab } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
 import { useOutputBuffer } from '@/composables/use-output-buffer'
 import { useClaudeStatus } from '@/composables/use-claude-status'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   sessionId: string
@@ -16,9 +18,14 @@ const props = defineProps<{
 }>()
 
 const terminalRef = ref<HTMLElement | null>(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const showScrollToBottom = ref(false)
+const showSearchBar = ref(false)
+const searchQuery = ref('')
+const searchResultInfo = ref('')
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
+let searchAddon: SearchAddon | null = null
 let resizeObserver: ResizeObserver | null = null
 let resizeTimeout: number | null = null
 let resizeAnimationFrame: number | null = null
@@ -30,6 +37,64 @@ const store = useTerminalStore()
 const { connect, write, resize, isConnected } = usePtySession(props.sessionId)
 const { monitorInput, processOutput, stopMonitoring, isClaudeCommand } = useCommandMonitor()
 const claudeStatus = useClaudeStatus()
+const { t } = useI18n()
+
+// Search functions
+const toggleSearchBar = async () => {
+  showSearchBar.value = !showSearchBar.value
+  if (showSearchBar.value) {
+    await nextTick()
+    searchInputRef.value?.focus()
+    searchInputRef.value?.select()
+  } else {
+    searchQuery.value = ''
+    searchResultInfo.value = ''
+    searchAddon?.clearDecorations()
+    terminal?.focus()
+  }
+}
+
+const doSearch = (direction: 'next' | 'prev' = 'next') => {
+  if (!searchAddon || !searchQuery.value) {
+    searchResultInfo.value = ''
+    searchAddon?.clearDecorations()
+    return
+  }
+  let found: boolean
+  if (direction === 'next') {
+    found = searchAddon.findNext(searchQuery.value, { decorations: {
+      matchOverviewRuler: '#888888',
+      activeMatchColorOverviewRuler: '#007acc',
+      matchBackground: '#515c6a',
+      activeMatchBackground: '#007acc',
+    }})
+  } else {
+    found = searchAddon.findPrevious(searchQuery.value, { decorations: {
+      matchOverviewRuler: '#888888',
+      activeMatchColorOverviewRuler: '#007acc',
+      matchBackground: '#515c6a',
+      activeMatchBackground: '#007acc',
+    }})
+  }
+  searchResultInfo.value = found ? '' : t('search.noResults')
+}
+
+const handleSearchKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    doSearch(e.shiftKey ? 'prev' : 'next')
+  } else if (e.key === 'Escape') {
+    toggleSearchBar()
+  }
+}
+
+const closeSearch = () => {
+  showSearchBar.value = false
+  searchQuery.value = ''
+  searchResultInfo.value = ''
+  searchAddon?.clearDecorations()
+  terminal?.focus()
+}
 
 // Buffer to accumulate input for command detection
 let inputBuffer = ''
@@ -217,10 +282,22 @@ onMounted(async () => {
 
   fitAddon = new FitAddon()
   const webLinksAddon = new WebLinksAddon()
+  searchAddon = new SearchAddon()
 
   terminal.loadAddon(fitAddon)
   terminal.loadAddon(webLinksAddon)
+  terminal.loadAddon(searchAddon)
   terminal.open(terminalRef.value)
+
+  // Intercept Cmd/Ctrl+F for search
+  terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && e.type === 'keydown') {
+      e.preventDefault()
+      toggleSearchBar()
+      return false
+    }
+    return true
+  })
 
   // Listen for OSC 0/2 title changes from programs running in terminal
   terminal.onTitleChange((title) => {
@@ -432,6 +509,8 @@ onUnmounted(() => {
   outputBuffer?.dispose()
   outputBuffer = null
 
+  searchAddon?.dispose()
+  searchAddon = null
   resizeObserver?.disconnect()
   terminal?.dispose()
 
@@ -443,6 +522,30 @@ onUnmounted(() => {
 
 <template>
   <div class="terminal-wrapper">
+    <!-- Search Bar -->
+    <transition name="search-slide">
+      <div v-if="showSearchBar" class="search-bar">
+        <input
+          ref="searchInputRef"
+          v-model="searchQuery"
+          class="search-input"
+          :placeholder="t('search.placeholder')"
+          @keydown="handleSearchKeydown"
+          @input="doSearch('next')"
+        />
+        <span v-if="searchResultInfo" class="search-info">{{ searchResultInfo }}</span>
+        <button class="search-nav-btn" @click="doSearch('prev')" title="Previous (Shift+Enter)">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 3L2 7h8L6 3z" fill="currentColor"/></svg>
+        </button>
+        <button class="search-nav-btn" @click="doSearch('next')" title="Next (Enter)">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 9L2 5h8L6 9z" fill="currentColor"/></svg>
+        </button>
+        <button class="search-close-btn" @click="closeSearch">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5"/></svg>
+        </button>
+      </div>
+    </transition>
+
     <!-- Scroll to Bottom Button -->
     <transition name="fade">
       <button
@@ -574,5 +677,106 @@ onUnmounted(() => {
 .fade-leave-from {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* Search Bar */
+.search-bar {
+  position: absolute;
+  top: 0;
+  right: 16px;
+  z-index: 101;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: rgba(37, 37, 38, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.search-input {
+  width: 180px;
+  padding: 4px 8px;
+  background: #3c3c3c;
+  border: 1px solid #555;
+  border-radius: 3px;
+  color: #e7e7e7;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-input:focus {
+  border-color: #007acc;
+}
+
+.search-input::placeholder {
+  color: #888;
+}
+
+.search-info {
+  font-size: 11px;
+  color: #e88;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.search-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: #ccc;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.search-nav-btn:hover {
+  background: #555;
+  color: #fff;
+}
+
+.search-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: #ccc;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-left: 2px;
+}
+
+.search-close-btn:hover {
+  background: #d32f2f;
+  color: #fff;
+}
+
+/* Search slide transition */
+.search-slide-enter-active,
+.search-slide-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.search-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.search-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

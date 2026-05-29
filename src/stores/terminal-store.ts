@@ -671,5 +671,98 @@ export const useTerminalStore = defineStore("terminal", {
     setDisplayMode(mode: 'tabs' | 'conversation') {
       this.displayMode = mode;
     },
+
+    // ============================================================================
+    // Preset Layout Actions
+    // ============================================================================
+
+    async spawnPane(): Promise<{ paneId: string; sessionId: string; cwd: string }> {
+      const paneId = `pane_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      let sessionId = `mock_session_${Date.now()}`;
+      let cwd = '~';
+
+      try {
+        // @ts-ignore
+        if (window.__TAURI_INTERNALS__) {
+          const response = await invoke<{ session_id: string; cwd: string }>(
+            'pty_spawn',
+            { cols: 80, rows: 24 },
+          );
+          sessionId = response.session_id;
+          cwd = response.cwd;
+        }
+      } catch (error) {
+        console.error('Failed to spawn PTY session:', error);
+      }
+
+      return { paneId, sessionId, cwd };
+    },
+
+    async createTabWithPresetLayout(preset: 'dual' | 'quad' | 'triple') {
+      const tabId = `tab_${Date.now()}`;
+      let layout: SplitNode;
+
+      if (preset === 'dual') {
+        const [p1, p2] = await Promise.all([this.spawnPane(), this.spawnPane()]);
+        layout = {
+          type: 'horizontal',
+          children: [
+            { type: 'pane', paneId: p1.paneId, sessionId: p1.sessionId, cwd: p1.cwd, size: 50 },
+            { type: 'pane', paneId: p2.paneId, sessionId: p2.sessionId, cwd: p2.cwd, size: 50 },
+          ],
+        };
+        this.activePaneId = p1.paneId;
+      } else if (preset === 'quad') {
+        const [p1, p2, p3, p4] = await Promise.all([
+          this.spawnPane(), this.spawnPane(), this.spawnPane(), this.spawnPane(),
+        ]);
+        layout = {
+          type: 'vertical',
+          children: [
+            {
+              type: 'horizontal',
+              size: 50,
+              children: [
+                { type: 'pane', paneId: p1.paneId, sessionId: p1.sessionId, cwd: p1.cwd, size: 50 },
+                { type: 'pane', paneId: p2.paneId, sessionId: p2.sessionId, cwd: p2.cwd, size: 50 },
+              ],
+            },
+            {
+              type: 'horizontal',
+              size: 50,
+              children: [
+                { type: 'pane', paneId: p3.paneId, sessionId: p3.sessionId, cwd: p3.cwd, size: 50 },
+                { type: 'pane', paneId: p4.paneId, sessionId: p4.sessionId, cwd: p4.cwd, size: 50 },
+              ],
+            },
+          ],
+        };
+        this.activePaneId = p1.paneId;
+      } else {
+        // triple: left-center-right
+        const [p1, p2, p3] = await Promise.all([
+          this.spawnPane(), this.spawnPane(), this.spawnPane(),
+        ]);
+        layout = {
+          type: 'horizontal',
+          children: [
+            { type: 'pane', paneId: p1.paneId, sessionId: p1.sessionId, cwd: p1.cwd, size: 33.33 },
+            { type: 'pane', paneId: p2.paneId, sessionId: p2.sessionId, cwd: p2.cwd, size: 33.34 },
+            { type: 'pane', paneId: p3.paneId, sessionId: p3.sessionId, cwd: p3.cwd, size: 33.33 },
+          ],
+        };
+        this.activePaneId = p1.paneId;
+      }
+
+      const tab: TerminalTab = {
+        id: tabId,
+        title: 'Terminal',
+        layout,
+        createdAt: Date.now(),
+      };
+
+      this.tabs.push(tab);
+      this.activeTabId = tabId;
+    },
   },
 });

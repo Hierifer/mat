@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, inject, computed, type Ref } from 'vue'
+import { ref, inject, computed, onMounted, onUnmounted, type Ref } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { usePlatform } from '@/composables/use-platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { useI18n } from 'vue-i18n'
 
 const store = useTerminalStore()
+const { t } = useI18n()
 
 // Inject speech recognition
 const speechRecognition = inject<{
@@ -64,6 +66,34 @@ const handleTabClick = (tabId: string) => {
 const handleNewTab = () => {
   store.createTab()
 }
+
+// Layout preset dropdown
+const showLayoutMenu = ref(false)
+
+const toggleLayoutMenu = () => {
+  showLayoutMenu.value = !showLayoutMenu.value
+}
+
+const applyPreset = (preset: 'dual' | 'quad' | 'triple') => {
+  store.createTabWithPresetLayout(preset)
+  showLayoutMenu.value = false
+}
+
+// Close menu on outside click
+const onDocumentClick = (e: MouseEvent) => {
+  const wrapper = document.querySelector('.layout-preset-wrapper')
+  if (wrapper && !wrapper.contains(e.target as Node)) {
+    showLayoutMenu.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick)
+})
 
 const handleCloseTab = (tabId: string, event: Event) => {
   event.stopPropagation()
@@ -144,6 +174,42 @@ const handleKeydown = (e: KeyboardEvent) => {
     <button class="new-tab-btn" @click="handleNewTab" title="New tab">
       +
     </button>
+
+    <!-- Layout preset dropdown -->
+    <div class="layout-preset-wrapper">
+      <button class="new-tab-btn" @click="toggleLayoutMenu" :title="t('layout.presets')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="1" width="6" height="14" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          <rect x="9" y="1" width="6" height="14" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        </svg>
+      </button>
+      <div v-if="showLayoutMenu" class="layout-menu">
+        <button class="layout-menu-item" @click="applyPreset('dual')">
+          <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+            <rect x="1" y="1" width="10" height="14" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+            <rect x="13" y="1" width="10" height="14" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          </svg>
+          <span>{{ t('layout.dual') }}</span>
+        </button>
+        <button class="layout-menu-item" @click="applyPreset('triple')">
+          <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+            <rect x="1" y="1" width="6" height="14" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+            <rect x="9" y="1" width="6" height="14" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+            <rect x="17" y="1" width="6" height="14" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          </svg>
+          <span>{{ t('layout.triple') }}</span>
+        </button>
+        <button class="layout-menu-item" @click="applyPreset('quad')">
+          <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+            <rect x="1" y="1" width="10" height="6" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+            <rect x="13" y="1" width="10" height="6" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+            <rect x="1" y="9" width="10" height="6" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+            <rect x="13" y="9" width="10" height="6" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          </svg>
+          <span>{{ t('layout.quad') }}</span>
+        </button>
+      </div>
+    </div>
 
     <!-- Draggable spacer -->
     <div class="drag-spacer" data-tauri-drag-region></div>
@@ -654,5 +720,64 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 .settings-btn:active {
   background: #007acc;
+}
+
+/* Layout Preset Dropdown */
+.layout-preset-wrapper {
+  position: relative;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.layout-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: #2d2d30;
+  border: 1px solid #454545;
+  border-radius: 6px;
+  padding: 4px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  min-width: 160px;
+}
+
+.light-theme .layout-menu {
+  background: #f3f3f3;
+  border-color: #d4d4d4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.layout-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #cccccc;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.light-theme .layout-menu-item {
+  color: #333333;
+}
+
+.layout-menu-item:hover {
+  background: #37373d;
+}
+
+.light-theme .layout-menu-item:hover {
+  background: #e0e0e0;
+}
+
+.layout-menu-item svg {
+  flex-shrink: 0;
 }
 </style>

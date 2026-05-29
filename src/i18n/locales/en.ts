@@ -113,6 +113,17 @@ export default {
     builtWith: 'Built with:',
     copyright: '© {year} Hierifer. All rights reserved.',
   },
+  layout: {
+    presets: 'Layout Presets',
+    dual: 'Side by Side',
+    triple: 'Three Columns',
+    quad: 'Four Grid',
+  },
+  search: {
+    placeholder: 'Search...',
+    noResults: 'No results',
+    matchCount: '{current}/{total}',
+  },
   paneToolbar: {
     splitHorizontal: 'Split Horizontal',
     splitVertical: 'Split Vertical',
