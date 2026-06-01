@@ -4,12 +4,14 @@ import { Terminal } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SearchAddon } from '@xterm/addon-search'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import 'xterm/css/xterm.css'
 import { usePtySession } from '@/composables/use-pty-session'
 import { useTerminalStore, type SplitNode, type TerminalTab } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
 import { useOutputBuffer } from '@/composables/use-output-buffer'
 import { useClaudeStatus } from '@/composables/use-claude-status'
+import { registerTerminal, unregisterTerminal } from '@/composables/terminal-registry'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
@@ -283,11 +285,26 @@ onMounted(async () => {
   fitAddon = new FitAddon()
   const webLinksAddon = new WebLinksAddon()
   searchAddon = new SearchAddon()
+  const serializeAddon = new SerializeAddon()
 
   terminal.loadAddon(fitAddon)
   terminal.loadAddon(webLinksAddon)
   terminal.loadAddon(searchAddon)
+  terminal.loadAddon(serializeAddon)
   terminal.open(terminalRef.value)
+
+  // Register terminal in global registry (for state serialization)
+  if (props.paneId) {
+    registerTerminal(props.paneId, terminal)
+  }
+
+  // Restore saved terminal content (after app update)
+  if (props.paneId) {
+    const savedContent = store.getSavedPaneContent(props.paneId)
+    if (savedContent) {
+      terminal.write(savedContent)
+    }
+  }
 
   // Intercept Cmd/Ctrl+F for search
   terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
@@ -508,6 +525,11 @@ onUnmounted(() => {
   // 清理输出缓冲器
   outputBuffer?.dispose()
   outputBuffer = null
+
+  // Unregister from global registry
+  if (props.paneId) {
+    unregisterTerminal(props.paneId)
+  }
 
   searchAddon?.dispose()
   searchAddon = null

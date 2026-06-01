@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
+import { useTerminalStore } from '@/stores/terminal-store'
 
 export interface UpdateInfo {
   version: string
@@ -107,6 +108,15 @@ export function useUpdater() {
             break
         }
       })
+
+      // Save terminal state before restarting
+      console.log('[Updater] Saving terminal state before relaunch...')
+      try {
+        const store = useTerminalStore()
+        store.saveTerminalState()
+      } catch (err) {
+        console.warn('[Updater] Failed to save terminal state:', err)
+      }
 
       console.log('[Updater] Installing update and restarting...')
       await relaunch()

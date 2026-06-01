@@ -2,6 +2,22 @@ import { defineStore } from 'pinia'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { themes, type ITheme } from "@/settings/themes";
+import { SerializeAddon } from '@xterm/addon-serialize'
+import { getAllTerminals } from '@/composables/terminal-registry'
+
+const SAVED_STATE_KEY = 'materm_terminal_state'
+
+export interface SavedTerminalState {
+  tabs: Array<{
+    id: string
+    title: string
+    titleManuallySet?: boolean
+    layout: SplitNode
+  }>
+  activeTabId: string | null
+  activePaneId: string | null
+  paneContents: Record<string, string> // paneId -> serialized terminal content
+}
 
 export interface TerminalTab {
   id: string
@@ -55,6 +71,8 @@ export const useTerminalStore = defineStore("terminal", {
     autoRestoreSessions: false,
     isSessionManagerOpen: false,
     displayMode: 'tabs' as 'tabs' | 'conversation', // 布局模式
+    // Transient: saved pane contents during restore (not persisted)
+    _savedPaneContents: null as Record<string, string> | null,
   }),
 
   getters: {
@@ -670,6 +688,192 @@ export const useTerminalStore = defineStore("terminal", {
 
     setDisplayMode(mode: 'tabs' | 'conversation') {
       this.displayMode = mode;
+    },
+
+    // ============================================================================
+    // Terminal State Save / Restore (for app updates)
+    // ============================================================================
+
+    /**
+     * Serialize all terminal buffers and save layout state to localStorage.
+     * Call this BEFORE app relaunch during updates.
+     */
+    saveTerminalState() {
+      try {
+        const terminals = getAllTerminals()
+        const paneContents: Record<string, string> = {}
+
+        for (const [paneId, terminal] of terminals) {
+          try {
+            // Use the serialize addon already loaded on the terminal
+            const addon = new SerializeAddon()
+            terminal.loadAddon(addon)
+            paneContents[paneId] = addon.serialize()
+            addon.dispose()
+          } catch (err) {
+            console.warn(`[Store] Failed to serialize pane ${paneId}:`, err)
+          }
+        }
+
+        // Strip sessionId from layout (sessions will be recreated)
+        const stripSessions = (node: SplitNode): SplitNode => {
+          if (node.type === 'pane') {
+            return { type: 'pane', paneId: node.paneId, cwd: node.cwd, size: node.size }
+          }
+          return {
+            type: node.type,
+            size: node.size,
+            children: node.children?.map(stripSessions),
+          }
+        }
+
+        const state: SavedTerminalState = {
+          tabs: this.tabs.map(tab => ({
+            id: tab.id,
+            title: tab.title,
+            titleManuallySet: tab.titleManuallySet,
+            layout: stripSessions(tab.layout),
+          })),
+          activeTabId: this.activeTabId,
+          activePaneId: this.activePaneId,
+          paneContents,
+        }
+
+        localStorage.setItem(SAVED_STATE_KEY, JSON.stringify(state))
+        console.log(`[Store] Terminal state saved (${Object.keys(paneContents).length} panes)`)
+      } catch (err) {
+        console.error('[Store] Failed to save terminal state:', err)
+      }
+    },
+
+    /**
+     * Check if there's saved terminal state from a previous session (e.g., after update).
+     */
+    hasSavedTerminalState(): boolean {
+      return localStorage.getItem(SAVED_STATE_KEY) !== null
+    },
+
+    /**
+     * Restore tabs from saved state, spawning new PTY sessions for each pane.
+     * Returns true if state was restored successfully.
+     */
+    async restoreTerminalState(): Promise<boolean> {
+      const raw = localStorage.getItem(SAVED_STATE_KEY)
+      if (!raw) return false
+
+      try {
+        const state: SavedTerminalState = JSON.parse(raw)
+        // Store pane contents temporarily for terminal-instance to pick up
+        this._savedPaneContents = state.paneContents
+
+        // Rebuild each tab with new PTY sessions
+        for (const savedTab of state.tabs) {
+          const tabId = savedTab.id
+          const layout = await this.rebuildLayoutWithSessions(savedTab.layout)
+
+          const tab: TerminalTab = {
+            id: tabId,
+            title: savedTab.title,
+            titleManuallySet: savedTab.titleManuallySet,
+            layout,
+            createdAt: Date.now(),
+          }
+
+          this.tabs.push(tab)
+        }
+
+        // Restore active tab/pane
+        if (state.activeTabId && this.tabs.find(t => t.id === state.activeTabId)) {
+          this.activeTabId = state.activeTabId
+        } else if (this.tabs.length > 0) {
+          this.activeTabId = this.tabs[0].id
+        }
+
+        if (state.activePaneId) {
+          this.activePaneId = state.activePaneId
+        }
+
+        console.log(`[Store] Terminal state restored (${this.tabs.length} tabs)`)
+
+        // Clean up saved state after a delay (give terminals time to mount and read content)
+        setTimeout(() => {
+          this.clearSavedTerminalState()
+        }, 5000)
+
+        return true
+      } catch (err) {
+        console.error('[Store] Failed to restore terminal state:', err)
+        this.clearSavedTerminalState()
+        return false
+      }
+    },
+
+    /**
+     * Get saved pane content for a specific pane (called by terminal-instance on mount).
+     */
+    getSavedPaneContent(paneId: string): string | null {
+      return this._savedPaneContents?.[paneId] || null
+    },
+
+    clearSavedTerminalState() {
+      localStorage.removeItem(SAVED_STATE_KEY)
+      this._savedPaneContents = null
+    },
+
+    /**
+     * Recursively rebuild a layout tree, spawning new PTY sessions for each pane.
+     */
+    async rebuildLayoutWithSessions(node: SplitNode): Promise<SplitNode> {
+      if (node.type === 'pane') {
+        const { sessionId, cwd } = await this.spawnPaneWithCwd(node.cwd)
+        return {
+          type: 'pane',
+          paneId: node.paneId, // Keep the same paneId so saved content matches
+          sessionId,
+          cwd: cwd || node.cwd,
+          size: node.size,
+        }
+      }
+
+      const children = await Promise.all(
+        (node.children || []).map(child => this.rebuildLayoutWithSessions(child))
+      )
+      return {
+        type: node.type,
+        size: node.size,
+        children,
+      }
+    },
+
+    async spawnPaneWithCwd(cwd?: string): Promise<{ sessionId: string; cwd: string }> {
+      let sessionId = `mock_session_${Date.now()}`;
+      let resolvedCwd = cwd || '~';
+
+      try {
+        // @ts-ignore
+        if (window.__TAURI_INTERNALS__) {
+          const response = await invoke<{ session_id: string; cwd: string }>(
+            'pty_spawn',
+            { cols: 80, rows: 24 },
+          );
+          sessionId = response.session_id;
+          resolvedCwd = response.cwd;
+
+          // cd to the saved cwd if different
+          if (cwd && cwd !== '~' && cwd !== resolvedCwd) {
+            const encoder = new TextEncoder()
+            const cdCmd = `cd ${JSON.stringify(cwd)}\n`
+            await invoke('pty_write', {
+              sessionId,
+              data: Array.from(encoder.encode(cdCmd)),
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to spawn PTY session:', error);
+      }
+
+      return { sessionId, cwd: resolvedCwd };
     },
 
     // ============================================================================

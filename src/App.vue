@@ -154,7 +154,15 @@ onMounted(async () => {
 
   // Create initial tab or restore sessions
   try {
-    if (terminalStore.tmuxEnabled && terminalStore.autoRestoreSessions) {
+    // Check if there's saved terminal state from an update
+    if (terminalStore.hasSavedTerminalState()) {
+      console.log('Restoring terminal state from previous session...')
+      const restored = await terminalStore.restoreTerminalState()
+      if (!restored) {
+        console.warn('State restore failed, creating fresh tab')
+        await terminalStore.createTab()
+      }
+    } else if (terminalStore.tmuxEnabled && terminalStore.autoRestoreSessions) {
       console.log('Restoring tmux sessions...')
       await terminalStore.restoreSessions()
     } else {
