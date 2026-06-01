@@ -180,6 +180,8 @@ pub fn run() {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             speech::speech_check_permission,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
+            speech::speech_request_permission,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             speech::speech_start_recognition,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             speech::speech_stop_recognition,

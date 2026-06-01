@@ -40,14 +40,6 @@ impl Default for RecognitionState {
     }
 }
 
-/// 检查麦克风权限（被动模式 - 让系统自然触发）
-fn check_microphone_permission() -> Result<bool, String> {
-    println!("[Whisper] Permission check (passive mode)");
-    println!("[Whisper] System will show permission dialog on first microphone access");
-    // 让 cpal 库在首次访问麦克风时自然触发系统权限请求
-    Ok(true)
-}
-
 /// Check if Whisper is available (model file exists)
 #[tauri::command]
 pub async fn speech_check_availability() -> Result<bool, String> {
@@ -55,10 +47,136 @@ pub async fn speech_check_availability() -> Result<bool, String> {
     Ok(model_path.exists())
 }
 
-/// 检查麦克风权限
+/// 检查麦克风权限状态（不弹窗）
 #[tauri::command]
 pub async fn speech_check_permission() -> Result<bool, String> {
-    check_microphone_permission()
+    #[cfg(target_os = "macos")]
+    {
+        check_microphone_permission_macos()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Non-macOS: assume granted (Linux doesn't have the same permission model)
+        Ok(true)
+    }
+}
+
+/// 主动请求麦克风权限（会弹出系统授权对话框）
+#[tauri::command]
+pub async fn speech_request_permission() -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        request_microphone_permission_macos().await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(true)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn check_microphone_permission_macos() -> Result<bool, String> {
+    use std::process::Command;
+    // Use osascript to check the current authorization status without triggering a prompt
+    // AVAuthorizationStatus: 0=notDetermined, 1=restricted, 2=denied, 3=authorized
+    let output = Command::new("osascript")
+        .args([
+            "-e",
+            "use framework \"AVFoundation\"
+             set status to current application's AVCaptureDevice's authorizationStatusForMediaType:(current application's AVMediaTypeAudio)
+             return status as integer",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to check permission: {}", e))?;
+
+    let status_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let status: i32 = status_str.parse().unwrap_or(-1);
+
+    println!("[Whisper] macOS microphone permission status: {} (0=notDetermined, 2=denied, 3=authorized)", status);
+
+    match status {
+        3 => Ok(true),    // authorized
+        0 => Ok(false),   // notDetermined - need to request
+        _ => Ok(false),   // denied or restricted
+    }
+}
+
+#[cfg(target_os = "macos")]
+async fn request_microphone_permission_macos() -> Result<bool, String> {
+    use std::sync::{Arc, Condvar, Mutex as StdMutex};
+
+    // First check current status
+    let already_granted = check_microphone_permission_macos().unwrap_or(false);
+    if already_granted {
+        println!("[Whisper] Microphone permission already granted");
+        return Ok(true);
+    }
+
+    println!("[Whisper] Requesting microphone permission via AVCaptureDevice...");
+
+    // Use osascript to trigger the system permission dialog and wait for the result
+    let pair = Arc::new((StdMutex::new(None::<bool>), Condvar::new()));
+    let pair_clone = pair.clone();
+
+    std::thread::spawn(move || {
+        use std::process::Command;
+        // This script requests access and returns the result
+        let output = Command::new("osascript")
+            .args([
+                "-e",
+                "use framework \"AVFoundation\"
+                 use framework \"Foundation\"
+
+                 set theResult to missing value
+                 set isComplete to false
+
+                 current application's AVCaptureDevice's requestAccessForMediaType:(current application's AVMediaTypeAudio) completionHandler:(void)
+                 delay 0.5
+
+                 -- After requesting, check the status
+                 repeat 20 times
+                     set status to current application's AVCaptureDevice's authorizationStatusForMediaType:(current application's AVMediaTypeAudio)
+                     set statusInt to status as integer
+                     if statusInt is not 0 then
+                         return statusInt
+                     end if
+                     delay 0.5
+                 end repeat
+                 return 0",
+            ])
+            .output();
+
+        let granted = match output {
+            Ok(out) => {
+                let status_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let status: i32 = status_str.parse().unwrap_or(0);
+                println!("[Whisper] Permission request result status: {}", status);
+                status == 3
+            }
+            Err(e) => {
+                println!("[Whisper] Permission request failed: {}", e);
+                false
+            }
+        };
+
+        let (lock, cvar) = &*pair_clone;
+        let mut result = lock.lock().unwrap();
+        *result = Some(granted);
+        cvar.notify_one();
+    });
+
+    // Wait for the permission dialog result (timeout 15s)
+    let (lock, cvar) = &*pair;
+    let result = lock.lock().unwrap();
+    let (result, _) = cvar.wait_timeout_while(
+        result,
+        std::time::Duration::from_secs(15),
+        |r| r.is_none(),
+    ).map_err(|e| format!("Permission wait failed: {}", e))?;
+
+    let granted = result.unwrap_or(false);
+    println!("[Whisper] Microphone permission granted: {}", granted);
+    Ok(granted)
 }
 
 /// 列出可用的音频输入设备（用于调试）
@@ -223,14 +341,26 @@ pub async fn speech_start_recognition(
 ) -> Result<(), String> {
     println!("[Whisper] Starting recognition with language: {:?}", language);
 
-    // 首先检查麦克风权限（被动检查）
+    // Check microphone permission
     println!("[Whisper] Checking microphone permission...");
-    match check_microphone_permission() {
+    match speech_check_permission().await {
         Ok(true) => {
-            println!("[Whisper] ✓ Permission check passed (passive mode)");
+            println!("[Whisper] ✓ Microphone permission granted");
         }
         Ok(false) => {
-            return Err("麦克风权限检查失败".to_string());
+            println!("[Whisper] ✗ Microphone permission not granted, requesting...");
+            match speech_request_permission().await {
+                Ok(true) => {
+                    println!("[Whisper] ✓ Microphone permission granted after request");
+                }
+                Ok(false) => {
+                    return Err("麦克风权限被拒绝。请在系统设置 > 隐私与安全性 > 麦克风中允许 Materm 访问。".to_string());
+                }
+                Err(e) => {
+                    println!("[Whisper] ✗ Permission request failed: {}", e);
+                    return Err(e);
+                }
+            }
         }
         Err(e) => {
             println!("[Whisper] ✗ Permission check failed: {}", e);

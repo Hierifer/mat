@@ -56,6 +56,26 @@ export function useSpeechRecognition() {
     if (unlistenError) unlistenError()
   })
 
+  // Proactively request microphone permission
+  const requestMicrophonePermission = async (): Promise<boolean> => {
+    try {
+      // @ts-ignore
+      if (window.__TAURI_INTERNALS__) {
+        const granted = await invoke<boolean>('speech_request_permission')
+        console.log('[Speech] Microphone permission:', granted ? 'granted' : 'denied')
+        if (!granted) {
+          error.value = '麦克风权限被拒绝。请在系统设置 > 隐私与安全性 > 麦克风中允许 Materm 访问。'
+        }
+        return granted
+      }
+    } catch (e) {
+      console.warn('[Speech] Permission request failed:', e)
+      error.value = String(e)
+      return false
+    }
+    return true
+  }
+
   // Check if browser supports speech recognition
   const checkSupport = async () => {
     // Detect macOS
@@ -67,13 +87,9 @@ export function useSpeechRecognition() {
       try {
         const nativeAvailable = await invoke<boolean>('speech_check_availability')
         if (nativeAvailable) {
-          // Use Whisper API (cross-platform)
-          // Note: Microphone permission will be requested by the system
-          // when audio capture starts
           useNativeAPI.value = true
           isSupported.value = true
           console.log('[Speech] Using Whisper Speech Recognition')
-          console.log('[Speech] Microphone permission will be requested on first use')
           return true
         }
       } catch (e) {
@@ -279,6 +295,15 @@ export function useSpeechRecognition() {
     } else {
       // Check support first
       await checkSupport()
+
+      // Request microphone permission before starting
+      if (useNativeAPI.value) {
+        const granted = await requestMicrophonePermission()
+        if (!granted) {
+          return
+        }
+      }
+
       await start()
     }
   }
