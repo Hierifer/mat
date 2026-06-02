@@ -1,6 +1,6 @@
 [package]
 name = "materm"
-version = "1.3.0"
+version = "1.3.2"
 description = "Modern terminal emulator with iTerm2-style features"
 authors = ["Hierifer"]
 edition = "2021"
