@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
+import { getVersion } from '@tauri-apps/api/app'
 import { useTerminalStore } from '@/stores/terminal-store'
 
 export interface UpdateInfo {
@@ -31,10 +32,22 @@ export function useUpdater() {
       console.log('[Updater] check() returned:', update)
 
       if (update) {
+        // Compare with current version to avoid false positives
+        let currentVersion = ''
+        try {
+          currentVersion = await getVersion()
+        } catch (_) {}
+
+        if (currentVersion && update.version === currentVersion) {
+          console.log(`[Updater] Remote version ${update.version} matches current version, skipping`)
+          updateAvailable.value = false
+          pendingUpdate = null
+          updateInfo.value = null
+          return false
+        }
+
         console.log('[Updater] Update available!')
-        console.log('[Updater] Version:', update.version)
-        console.log('[Updater] Date:', update.date)
-        console.log('[Updater] Body length:', update.body?.length || 0)
+        console.log('[Updater] Current:', currentVersion, '→ Remote:', update.version)
         updateAvailable.value = true
         pendingUpdate = update
         updateInfo.value = {
