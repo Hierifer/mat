@@ -31,6 +31,22 @@ pub fn run() {
             let pty_manager = Arc::new(Mutex::new(PtyManager::new()));
             app.manage(pty_manager);
 
+            // Proactively trigger macOS TCC permission dialogs for protected folders
+            #[cfg(target_os = "macos")]
+            {
+                std::thread::spawn(|| {
+                    if let Some(home) = dirs::home_dir() {
+                        for folder in &["Desktop", "Documents", "Downloads"] {
+                            let path = home.join(folder);
+                            match std::fs::read_dir(&path) {
+                                Ok(_) => println!("[Permissions] Access to ~/{} granted", folder),
+                                Err(e) => println!("[Permissions] Access to ~/{} denied: {}", folder, e),
+                            }
+                        }
+                    }
+                });
+            }
+
             // Build the menu
             let file_menu = SubmenuBuilder::new(app, "File")
                 .text("close_tab", "Close Tab")
