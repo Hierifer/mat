@@ -126,6 +126,7 @@ useKeyboardShortcuts()
 let unlistenSettings: UnlistenFn | null = null
 let unlistenAbout: UnlistenFn | null = null
 let unlistenCheckUpdates: UnlistenFn | null = null
+let unlistenDragDrop: UnlistenFn | null = null
 let cleanupThemeListener: (() => void) | null = null
 
 // Speech recognition keyboard shortcut (Ctrl+Shift+V or Cmd+Shift+V)
@@ -255,6 +256,18 @@ onMounted(async () => {
     }
   }, 3000)
 
+  // Listen for file drag-drop events
+  unlistenDragDrop = await listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
+    const paths = event.payload.paths
+    if (paths && paths.length > 0) {
+      const escaped = paths.map((p) => {
+        // Shell-escape: wrap in single quotes, escape embedded single quotes
+        return "'" + p.replace(/'/g, "'\\''") + "'"
+      })
+      sendToTerminal(escaped.join(' '))
+    }
+  })
+
   // Add keyboard shortcut for speech recognition
   window.addEventListener('keydown', handleSpeechShortcut)
   console.log('[App] Speech recognition shortcut registered (Ctrl+Shift+V)')
@@ -280,6 +293,7 @@ onUnmounted(() => {
   if (unlistenSettings) unlistenSettings()
   if (unlistenAbout) unlistenAbout()
   if (unlistenCheckUpdates) unlistenCheckUpdates()
+  if (unlistenDragDrop) unlistenDragDrop()
   window.removeEventListener('keydown', handleSpeechShortcut)
   if (cleanupThemeListener) cleanupThemeListener()
 })

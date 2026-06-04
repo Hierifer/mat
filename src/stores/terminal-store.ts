@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { themes, type ITheme } from "@/settings/themes";
 import { SerializeAddon } from '@xterm/addon-serialize'
-import { getAllTerminals } from '@/composables/terminal-registry'
+import { getAllTerminals } from '@/composables/xterm-manager'
 
 const SAVED_STATE_KEY = 'materm_terminal_state'
 

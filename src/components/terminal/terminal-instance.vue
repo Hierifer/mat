@@ -1,17 +1,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { Terminal } from 'xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import { WebLinksAddon } from '@xterm/addon-web-links'
-import { SearchAddon } from '@xterm/addon-search'
-import { SerializeAddon } from '@xterm/addon-serialize'
 import 'xterm/css/xterm.css'
 import { usePtySession } from '@/composables/use-pty-session'
 import { useTerminalStore, type SplitNode, type TerminalTab } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
-import { useOutputBuffer } from '@/composables/use-output-buffer'
 import { useClaudeStatus } from '@/composables/use-claude-status'
-import { registerTerminal, unregisterTerminal } from '@/composables/terminal-registry'
+import { xtermManager, type ManagedTerminal } from '@/composables/xterm-manager'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
@@ -25,18 +20,15 @@ const showScrollToBottom = ref(false)
 const showSearchBar = ref(false)
 const searchQuery = ref('')
 const searchResultInfo = ref('')
+let managed: ManagedTerminal | null = null
 let terminal: Terminal | null = null
-let fitAddon: FitAddon | null = null
-let searchAddon: SearchAddon | null = null
-let resizeObserver: ResizeObserver | null = null
 let resizeTimeout: number | null = null
 let resizeAnimationFrame: number | null = null
 let isUnmounting = false
-let outputBuffer: ReturnType<typeof useOutputBuffer> | null = null
 let lastKnownDimensions: { cols: number; rows: number } | null = null
 
 const store = useTerminalStore()
-const { connect, write, resize, isConnected } = usePtySession(props.sessionId)
+const { connect, write, resize, disconnect, isConnected } = usePtySession(props.sessionId)
 const { monitorInput, processOutput, stopMonitoring, isClaudeCommand } = useCommandMonitor()
 const claudeStatus = useClaudeStatus()
 const { t } = useI18n()
@@ -51,12 +43,13 @@ const toggleSearchBar = async () => {
   } else {
     searchQuery.value = ''
     searchResultInfo.value = ''
-    searchAddon?.clearDecorations()
+    managed?.searchAddon.clearDecorations()
     terminal?.focus()
   }
 }
 
 const doSearch = (direction: 'next' | 'prev' = 'next') => {
+  const searchAddon = managed?.searchAddon
   if (!searchAddon || !searchQuery.value) {
     searchResultInfo.value = ''
     searchAddon?.clearDecorations()
@@ -94,7 +87,7 @@ const closeSearch = () => {
   showSearchBar.value = false
   searchQuery.value = ''
   searchResultInfo.value = ''
-  searchAddon?.clearDecorations()
+  managed?.searchAddon.clearDecorations()
   terminal?.focus()
 }
 
@@ -169,99 +162,18 @@ const scrollToBottom = () => {
 
 onMounted(async () => {
   console.log(`[Terminal] Mounting terminal for session: ${props.sessionId}`)
-  if (!terminalRef.value) return
+  if (!terminalRef.value || !props.paneId) return
 
-  // Initialize xterm.js with performance optimizations
-  terminal = new Terminal({
-    fontFamily: '"JetBrains Mono", "Courier New", monospace',
-    fontSize: store.fontSize,
-    cursorBlink: true,
-    allowTransparency: true,
+  const paneId = props.paneId
+
+  // Create terminal via manager (handles Terminal + all addons + outputBuffer)
+  managed = xtermManager.create(paneId, terminalRef.value, {
     theme: store.currentTheme,
-    // 性能优化选项
-    scrollback: 3000, // 减少到 3000 行，防止内存泄漏（之前 10000 太大）
-    fastScrollModifier: 'shift', // Shift+滚轮快速滚动
-    fastScrollSensitivity: 5, // 快速滚动敏感度
-    windowsMode: false, // 禁用 Windows 换行模式可以提升性能
+    fontSize: store.fontSize,
+    scrollback: 3000,
   })
-
-  // Monitor buffer size and enforce scrollback limit
-  let lastBufferCheck = Date.now()
-  let lastBufferSize = 0
-  const BUFFER_CHECK_INTERVAL = 1000 // Check every 1 second
-  const MAX_BUFFER_ROWS = 5000 // Hard limit: 3000 scrollback + 2000 buffer = 5000 max
-
-  const checkAndTrimBuffer = () => {
-    if (!terminal) return
-
-    const now = Date.now()
-    if (now - lastBufferCheck < BUFFER_CHECK_INTERVAL) return
-
-    lastBufferCheck = now
-    const buffer = terminal.buffer.active
-    const totalRows = buffer.baseY + buffer.cursorY
-
-    // Also check viewport and selection coordinates
-    const viewportY = buffer.viewportY
-    const baseY = buffer.baseY
-
-    // Log detailed buffer state
-    if (totalRows > lastBufferSize + 1000) {
-      console.log(`[Terminal] Buffer state:`, {
-        totalRows,
-        baseY,
-        viewportY,
-        cursorY: buffer.cursorY,
-        growth: totalRows - lastBufferSize
-      })
-      lastBufferSize = totalRows
-    }
-
-    // CRITICAL: Force buffer reset if coordinates are broken
-    if (totalRows > MAX_BUFFER_ROWS || baseY > MAX_BUFFER_ROWS) {
-      console.error(`[Terminal] ⚠️ CRITICAL: Buffer corruption detected!`)
-      console.error(`[Terminal] totalRows: ${totalRows}, baseY: ${baseY}`)
-      console.error(`[Terminal] Xterm scrollback is NOT working - forcing buffer clear`)
-
-      // Pause output
-      if (outputBuffer) {
-        outputBuffer.pause()
-      }
-
-      // Force clear the terminal buffer to reset coordinates
-      // This will lose history but prevents crash
-      try {
-        // Method 1: Clear scrollback
-        terminal.clear()
-
-        // Method 2: Reset the terminal completely
-        terminal.reset()
-
-        console.log('[Terminal] Terminal reset complete, coordinates should be fixed')
-        console.log('[Terminal] Buffer state after reset:', {
-          totalRows: terminal.buffer.active.baseY + terminal.buffer.active.cursorY,
-          baseY: terminal.buffer.active.baseY,
-        })
-
-        // Show warning to user
-        const warningMsg = '\r\n\x1b[33m⚠️  Terminal buffer was reset due to excessive growth\x1b[0m\r\n'
-        terminal.write(warningMsg)
-      } catch (error) {
-        console.error('[Terminal] Failed to reset:', error)
-      }
-
-      // Resume output after a delay
-      setTimeout(() => {
-        if (outputBuffer) {
-          outputBuffer.resume()
-          console.log('[Terminal] Output resumed')
-        }
-      }, 1000)
-
-      // Reset tracking
-      lastBufferSize = 0
-    }
-  }
+  terminal = managed.terminal
+  const { fitAddon, outputBuffer } = managed
 
   // Watch for theme changes
   watch(() => store.currentThemeName, () => {
@@ -282,31 +194,13 @@ onMounted(async () => {
     }
   })
 
-  fitAddon = new FitAddon()
-  const webLinksAddon = new WebLinksAddon()
-  searchAddon = new SearchAddon()
-  const serializeAddon = new SerializeAddon()
-
-  terminal.loadAddon(fitAddon)
-  terminal.loadAddon(webLinksAddon)
-  terminal.loadAddon(searchAddon)
-  terminal.loadAddon(serializeAddon)
-  terminal.open(terminalRef.value)
-
-  // Register terminal in global registry (for state serialization)
-  if (props.paneId) {
-    registerTerminal(props.paneId, terminal)
-  }
-
   // Restore saved terminal content (after app update)
-  if (props.paneId) {
-    const savedContent = store.getSavedPaneContent(props.paneId)
-    if (savedContent) {
-      terminal.write(savedContent)
-    }
+  const savedContent = store.getSavedPaneContent(paneId)
+  if (savedContent) {
+    terminal.write(savedContent)
   }
 
-  // Intercept Cmd/Ctrl+F for search
+  // Intercept Cmd/Ctrl+F for search — register as disposable
   terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'f' && e.type === 'keydown') {
       e.preventDefault()
@@ -316,41 +210,28 @@ onMounted(async () => {
     return true
   })
 
-  // Listen for OSC 0/2 title changes from programs running in terminal
-  terminal.onTitleChange((title) => {
+  // Register xterm event listeners as disposables for proper cleanup
+  xtermManager.addDisposable(paneId, terminal.onTitleChange((title) => {
     if (title && props.paneId) {
       const tab = findTabForPane()
       if (tab && !tab.titleManuallySet) {
         store.updateTabTitle(tab.id, title)
-        firstCommandTitleSet = true // OSC title counts as set
+        firstCommandTitleSet = true
       }
     }
-  })
+  }))
 
-  // Listen for scroll events to show/hide scroll-to-bottom button
-  terminal.onScroll(() => {
+  xtermManager.addDisposable(paneId, terminal.onScroll(() => {
     checkScrollPosition()
-  })
+  }))
 
-  // Also check on write events (when new data arrives)
-  terminal.onWriteParsed(() => {
+  xtermManager.addDisposable(paneId, terminal.onWriteParsed(() => {
     checkScrollPosition()
-    checkAndTrimBuffer() // Prevent infinite buffer growth
-  })
-
-  // 初始化输出缓冲器（减少批次大小防止 buffer 增长）
-  outputBuffer = useOutputBuffer(terminal, {
-    batchInterval: 32, // 降低到 ~30fps，给 xterm 更多时间处理
-    maxBufferSize: 512 * 1024, // 减少到 512KB（之前 1MB 太大）
-    maxBatchSize: 16 * 1024, // 减少到 16KB（之前 64KB 太大）
-    enabled: true, // 启用输出节流
-  })
+  }))
 
   // Wait for terminal renderer to be fully initialized before fitting
-  // This prevents "Cannot read properties of undefined" errors
   await new Promise(resolve => setTimeout(resolve, 0))
 
-  // Fit terminal to container (only after renderer is ready)
   if (fitAddon && terminal && !isUnmounting) {
     try {
       fitAddon.fit()
@@ -359,15 +240,12 @@ onMounted(async () => {
     }
   }
 
-  // Handle user input
-  terminal.onData((data) => {
+  // Handle user input — register as disposable
+  xtermManager.addDisposable(paneId, terminal.onData((data) => {
     write(data)
 
-    // Monitor input for command detection
     if (data === '\r' || data === '\n') {
-      // Enter key pressed
       if (inputBuffer.trim()) {
-        // Auto-set tab title from first command if not already set
         if (!firstCommandTitleSet && props.paneId) {
           const tab = findTabForPane()
           if (tab && tab.title === 'Terminal' && !tab.titleManuallySet) {
@@ -378,7 +256,6 @@ onMounted(async () => {
           firstCommandTitleSet = true
         }
 
-        // Check if it's an AI command (Claude/Codex)
         monitorInput(props.sessionId, inputBuffer.trim())
         if (isClaudeCommand(inputBuffer.trim())) {
           claudeStatus.startSession(props.sessionId)
@@ -386,22 +263,18 @@ onMounted(async () => {
       }
       inputBuffer = ''
     } else if (data === '\x7f' || data === '\b') {
-      // Backspace - remove last character
       inputBuffer = inputBuffer.slice(0, -1)
     } else if (data === '\x03') {
-      // Ctrl+C - clear buffer
       inputBuffer = ''
     } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-      // Regular printable character
       inputBuffer += data
     }
-  })
+  }))
 
   // Connect to PTY session
   await connect((data) => {
     hasReceivedData = true
 
-    // Parse OSC 7 sequences for directory tracking
     if (props.paneId) {
       const newDir = parseOSC7(data)
       if (newDir) {
@@ -409,27 +282,33 @@ onMounted(async () => {
       }
     }
 
-    // 使用输出缓冲器写入数据（优化性能）
-    if (outputBuffer) {
-      outputBuffer.write(data)
-    } else {
-      // 后备方案：直接写入
-      terminal?.write(data)
-    }
+    outputBuffer.write(data)
 
-    // Monitor output for command completion
     const outputText = new TextDecoder().decode(data)
     processOutput(props.sessionId, outputText)
     claudeStatus.processOutput(props.sessionId, outputText)
   })
 
+  // Register cleanup callbacks with manager
+  xtermManager.addCleanup(paneId, () => {
+    // Disconnect PTY data listener (session close is handled by the store)
+    disconnect()
+  })
+  xtermManager.addCleanup(paneId, () => {
+    // Clear local timers
+    if (resizeTimeout) clearTimeout(resizeTimeout)
+    if (resizeAnimationFrame) cancelAnimationFrame(resizeAnimationFrame)
+  })
+  xtermManager.addCleanup(paneId, () => {
+    stopMonitoring(props.sessionId)
+    claudeStatus.endSession()
+  })
+
   // Watch for tab switches - if no data received, trigger refresh
   watch(() => store.activeTabId, async (newTabId) => {
-    // Check if this terminal's tab just became active
     const currentTab = store.tabs.find(t => t.id === newTabId)
     if (!currentTab) return
 
-    // Check if this session belongs to the active tab
     const sessionBelongsToTab = (node: any): boolean => {
       if (node.type === 'pane' && node.sessionId === props.sessionId) {
         return true
@@ -441,18 +320,14 @@ onMounted(async () => {
     }
 
     if (sessionBelongsToTab(currentTab.layout)) {
-      // This terminal's tab just became active
-      // Wait a bit then check if we have data
       setTimeout(async () => {
         if (!hasReceivedData && isConnected.value && terminal) {
           console.log(`[Terminal] Tab activated but no data received for session ${props.sessionId}, triggering refresh`)
-          // Try to trigger shell to redraw by resizing
           fitAddon?.fit()
           const dims = fitAddon?.proposeDimensions()
           if (dims) {
             await resize(dims.cols, dims.rows)
           }
-          // Send a newline to potentially trigger a prompt redraw
           write('\n')
         }
       }, 200)
@@ -460,85 +335,58 @@ onMounted(async () => {
   }, { immediate: false })
 
   // Handle resize with debouncing and dimension change detection
-  resizeObserver = new ResizeObserver(() => {
-    // Cancel any pending animation frame to avoid multiple rapid calls
+  const resizeObserver = new ResizeObserver(() => {
     if (resizeAnimationFrame) {
       cancelAnimationFrame(resizeAnimationFrame)
     }
 
-    // Use requestAnimationFrame to batch resize operations
     resizeAnimationFrame = requestAnimationFrame(() => {
-      // Guard: check all prerequisites before attempting resize
       if (isUnmounting || !fitAddon || !terminal) return
 
       try {
-        // Get proposed dimensions before fitting
         const proposedDims = fitAddon.proposeDimensions()
         if (!proposedDims) return
 
-        // Check if dimensions actually changed
         const dimsChanged =
           !lastKnownDimensions ||
           lastKnownDimensions.cols !== proposedDims.cols ||
           lastKnownDimensions.rows !== proposedDims.rows
 
         if (dimsChanged) {
-          // Fit the terminal to new dimensions
           fitAddon.fit()
 
-          // Use actual terminal dimensions after fit() for PTY resize
-          // This ensures PTY and xterm agree on exact dimensions
           const actualCols = terminal.cols
           const actualRows = terminal.rows
 
-          // Update last known dimensions with actual values
           lastKnownDimensions = {
             cols: actualCols,
             rows: actualRows,
           }
 
-          // Debounce the PTY resize call
           debouncedResize(actualCols, actualRows)
         }
       } catch (error) {
-        // Catch renderer initialization errors gracefully
-        // This can happen during split pane creation before terminal is fully ready
         console.warn('[Terminal] Resize failed (terminal may not be ready):', error)
       }
     }) as unknown as number
   })
   resizeObserver.observe(terminalRef.value)
+  xtermManager.setResizeObserver(paneId, resizeObserver)
 })
 
 onUnmounted(() => {
   console.log(`[Terminal] Unmounting terminal for session: ${props.sessionId}`)
   isUnmounting = true
 
-  // Clean up timers and animation frames
-  if (resizeTimeout) {
-    clearTimeout(resizeTimeout)
-  }
-  if (resizeAnimationFrame) {
-    cancelAnimationFrame(resizeAnimationFrame)
-  }
-
-  // 清理输出缓冲器
-  outputBuffer?.dispose()
-  outputBuffer = null
-
-  // Unregister from global registry
+  // Recycle via manager — handles all resource cleanup in correct order:
+  // cleanup callbacks (PTY disconnect, timers, monitors) -> outputBuffer ->
+  // ResizeObserver -> xterm disposables -> addons -> terminal.dispose()
   if (props.paneId) {
-    unregisterTerminal(props.paneId)
+    xtermManager.recycle(props.paneId)
   }
 
-  searchAddon?.dispose()
-  searchAddon = null
-  resizeObserver?.disconnect()
-  terminal?.dispose()
-
-  // Stop monitoring this session
-  stopMonitoring(props.sessionId)
-  claudeStatus.endSession()
+  managed = null
+  terminal = null
 })
 </script>
 

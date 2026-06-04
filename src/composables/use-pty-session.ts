@@ -95,17 +95,24 @@ export function usePtySession(sessionId: string) {
     }
   }
 
-  async function close() {
-    isClosed.value = true
-    isConnected.value = false
-
-    // @ts-ignore
-    if (!window.__TAURI_INTERNALS__) return
-
+  /**
+   * Disconnect the data event listener without closing the PTY session.
+   * Use this on component unmount — the store handles pty_close separately.
+   */
+  function disconnect() {
     if (unlisten) {
       unlisten()
       unlisten = null
     }
+    isConnected.value = false
+  }
+
+  async function close() {
+    isClosed.value = true
+    disconnect()
+
+    // @ts-ignore
+    if (!window.__TAURI_INTERNALS__) return
 
     try {
       await invoke('pty_close', { sessionId })
@@ -114,9 +121,5 @@ export function usePtySession(sessionId: string) {
     }
   }
 
-  // Note: We don't automatically close sessions on unmount
-  // Sessions are only closed when explicitly requested (tab close, pane close)
-  // This allows tab switching without losing sessions
-
-  return { isConnected, connect, write, resize, close }
+  return { isConnected, connect, write, resize, close, disconnect }
 }
