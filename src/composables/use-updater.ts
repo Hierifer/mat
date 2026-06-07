@@ -15,6 +15,7 @@ export function useUpdater() {
   const updateInfo = ref<UpdateInfo | null>(null)
   const isChecking = ref(false)
   const isDownloading = ref(false)
+  const isReadyToRestart = ref(false)
   const downloadProgress = ref(0)
   const error = ref<string | null>(null)
 
@@ -122,17 +123,8 @@ export function useUpdater() {
         }
       })
 
-      // Save terminal state before restarting
-      console.log('[Updater] Saving terminal state before relaunch...')
-      try {
-        const store = useTerminalStore()
-        store.saveTerminalState()
-      } catch (err) {
-        console.warn('[Updater] Failed to save terminal state:', err)
-      }
-
-      console.log('[Updater] Installing update and restarting...')
-      await relaunch()
+      console.log('[Updater] Update downloaded and installed. Waiting for user to restart.')
+      isReadyToRestart.value = true
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       console.error('[Updater] Download/install failed:', errorMessage)
@@ -143,11 +135,26 @@ export function useUpdater() {
     }
   }
 
+  const restartApp = async () => {
+    // Save terminal state before restarting
+    console.log('[Updater] Saving terminal state before relaunch...')
+    try {
+      const store = useTerminalStore()
+      store.saveTerminalState()
+    } catch (err) {
+      console.warn('[Updater] Failed to save terminal state:', err)
+    }
+
+    console.log('[Updater] Restarting app...')
+    await relaunch()
+  }
+
   const reset = () => {
     updateAvailable.value = false
     updateInfo.value = null
     isChecking.value = false
     isDownloading.value = false
+    isReadyToRestart.value = false
     downloadProgress.value = 0
     error.value = null
   }
@@ -157,10 +164,12 @@ export function useUpdater() {
     updateInfo,
     isChecking,
     isDownloading,
+    isReadyToRestart,
     downloadProgress,
     error,
     checkForUpdates,
     downloadAndInstall,
+    restartApp,
     reset,
   }
 }

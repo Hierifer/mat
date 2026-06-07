@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Receiver};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
 use std::path::PathBuf;
+
+use super::audio;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpeechRecognitionResult {
@@ -20,22 +23,17 @@ pub struct SpeechRecognitionError {
 // Global state
 lazy_static::lazy_static! {
     static ref RECOGNITION_STATE: Arc<Mutex<RecognitionState>> = Arc::new(Mutex::new(RecognitionState::default()));
+    static ref WHISPER_LISTENING: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 }
 
 struct RecognitionState {
-    is_listening: bool,
-    audio_buffer: Vec<f32>,
     whisper_ctx: Option<Arc<WhisperContext>>,
-    audio_tx: Option<Sender<Vec<f32>>>,
 }
 
 impl Default for RecognitionState {
     fn default() -> Self {
         Self {
-            is_listening: false,
-            audio_buffer: Vec::new(),
             whisper_ctx: None,
-            audio_tx: None,
         }
     }
 }
@@ -56,7 +54,6 @@ pub async fn speech_check_permission() -> Result<bool, String> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        // Non-macOS: assume granted (Linux doesn't have the same permission model)
         Ok(true)
     }
 }
@@ -77,8 +74,6 @@ pub async fn speech_request_permission() -> Result<bool, String> {
 #[cfg(target_os = "macos")]
 fn check_microphone_permission_macos() -> Result<bool, String> {
     use std::process::Command;
-    // Use osascript to check the current authorization status without triggering a prompt
-    // AVAuthorizationStatus: 0=notDetermined, 1=restricted, 2=denied, 3=authorized
     let output = Command::new("osascript")
         .args([
             "-e",
@@ -95,9 +90,9 @@ fn check_microphone_permission_macos() -> Result<bool, String> {
     println!("[Whisper] macOS microphone permission status: {} (0=notDetermined, 2=denied, 3=authorized)", status);
 
     match status {
-        3 => Ok(true),    // authorized
-        0 => Ok(false),   // notDetermined - need to request
-        _ => Ok(false),   // denied or restricted
+        3 => Ok(true),
+        0 => Ok(false),
+        _ => Ok(false),
     }
 }
 
@@ -105,7 +100,6 @@ fn check_microphone_permission_macos() -> Result<bool, String> {
 async fn request_microphone_permission_macos() -> Result<bool, String> {
     use std::sync::{Arc, Condvar, Mutex as StdMutex};
 
-    // First check current status
     let already_granted = check_microphone_permission_macos().unwrap_or(false);
     if already_granted {
         println!("[Whisper] Microphone permission already granted");
@@ -114,13 +108,11 @@ async fn request_microphone_permission_macos() -> Result<bool, String> {
 
     println!("[Whisper] Requesting microphone permission via AVCaptureDevice...");
 
-    // Use osascript to trigger the system permission dialog and wait for the result
     let pair = Arc::new((StdMutex::new(None::<bool>), Condvar::new()));
     let pair_clone = pair.clone();
 
     std::thread::spawn(move || {
         use std::process::Command;
-        // This script requests access and returns the result
         let output = Command::new("osascript")
             .args([
                 "-e",
@@ -165,7 +157,6 @@ async fn request_microphone_permission_macos() -> Result<bool, String> {
         cvar.notify_one();
     });
 
-    // Wait for the permission dialog result (timeout 15s)
     let (lock, cvar) = &*pair;
     let result = lock.lock().unwrap();
     let (result, _) = cvar.wait_timeout_while(
@@ -187,7 +178,6 @@ pub async fn speech_list_devices() -> Result<Vec<String>, String> {
     let host = cpal::default_host();
     let mut devices = Vec::new();
 
-    // 列出所有输入设备
     match host.input_devices() {
         Ok(input_devices) => {
             for (idx, device) in input_devices.enumerate() {
@@ -201,7 +191,6 @@ pub async fn speech_list_devices() -> Result<Vec<String>, String> {
         }
     }
 
-    // 获取默认输入设备
     if let Some(default_device) = host.default_input_device() {
         if let Ok(name) = default_device.name() {
             devices.insert(0, format!("默认设备: {}", name));
@@ -230,10 +219,9 @@ pub async fn speech_test_microphone() -> Result<String, String> {
     let sample_rate = config.sample_rate().0;
     let channels = config.channels() as usize;
 
-    // 收集 2 秒的音频数据
     let audio_data = Arc::new(Mutex::new(Vec::new()));
     let audio_data_clone = audio_data.clone();
-    let max_samples = sample_rate as usize * 2; // 2 seconds
+    let max_samples = sample_rate as usize * 2;
 
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => {
@@ -273,20 +261,16 @@ pub async fn speech_test_microphone() -> Result<String, String> {
     stream.play().map_err(|e| format!("Failed to start stream: {}", e))?;
 
     println!("[Test] Recording for 2 seconds... Please speak!");
-
-    // 等待 2 秒
     std::thread::sleep(std::time::Duration::from_secs(2));
-
     drop(stream);
 
     let audio = audio_data.lock().unwrap();
     let samples = audio.len();
 
     if samples == 0 {
-        return Ok("⚠️ 没有捕获到任何音频！\n\n可能原因：\n1. 麦克风权限被拒绝\n2. 麦克风被禁用或静音\n3. 系统音频设置问题\n\n请检查：系统设置 > 隐私与安全性 > 麦克风".to_string());
+        return Ok("没有捕获到任何音频！\n\n可能原因：\n1. 麦克风权限被拒绝\n2. 麦克风被禁用或静音\n3. 系统音频设置问题\n\n请检查：系统设置 > 隐私与安全性 > 麦克风".to_string());
     }
 
-    // 计算音频统计信息
     let rms = (audio.iter()
         .map(|&s| s * s)
         .sum::<f32>() / samples as f32)
@@ -301,7 +285,7 @@ pub async fn speech_test_microphone() -> Result<String, String> {
         .count();
 
     let result = format!(
-        "✅ 麦克风测试成功！\n\n\
+        "麦克风测试成功！\n\n\
         录制信息：\n\
         - 采样数: {}\n\
         - 采样率: {} Hz\n\
@@ -320,59 +304,31 @@ pub async fn speech_test_microphone() -> Result<String, String> {
         max_amplitude,
         (non_zero as f32 / samples as f32) * 100.0,
         if rms < 0.001 {
-            "⚠️ 音量太低！请大声说话或靠近麦克风"
+            "音量太低！请大声说话或靠近麦克风"
         } else if rms < 0.01 {
-            "⚡ 音量较低，可以检测到语音但可能识别率较低"
+            "音量较低，可以检测到语音但可能识别率较低"
         } else if rms < 0.1 {
-            "✓ 音量正常，适合语音识别"
+            "音量正常，适合语音识别"
         } else {
-            "✓ 音量很好！"
+            "音量很好！"
         }
     );
 
     Ok(result)
 }
 
-/// Start speech recognition
-#[tauri::command]
-pub async fn speech_start_recognition(
+/// Start Whisper speech recognition
+pub fn start_whisper_recognition(
     app: tauri::AppHandle,
-    language: Option<String>,
+    language: String,
 ) -> Result<(), String> {
-    println!("[Whisper] Starting recognition with language: {:?}", language);
+    println!("[Whisper] Starting recognition with language: {}", language);
 
-    // Check microphone permission
-    println!("[Whisper] Checking microphone permission...");
-    match speech_check_permission().await {
-        Ok(true) => {
-            println!("[Whisper] ✓ Microphone permission granted");
-        }
-        Ok(false) => {
-            println!("[Whisper] ✗ Microphone permission not granted, requesting...");
-            match speech_request_permission().await {
-                Ok(true) => {
-                    println!("[Whisper] ✓ Microphone permission granted after request");
-                }
-                Ok(false) => {
-                    return Err("麦克风权限被拒绝。请在系统设置 > 隐私与安全性 > 麦克风中允许 Materm 访问。".to_string());
-                }
-                Err(e) => {
-                    println!("[Whisper] ✗ Permission request failed: {}", e);
-                    return Err(e);
-                }
-            }
-        }
-        Err(e) => {
-            println!("[Whisper] ✗ Permission check failed: {}", e);
-            return Err(e);
-        }
+    if WHISPER_LISTENING.load(Ordering::Relaxed) {
+        return Err("Already listening".to_string());
     }
 
     let mut state = RECOGNITION_STATE.lock().unwrap();
-
-    if state.is_listening {
-        return Err("Already listening".to_string());
-    }
 
     // Initialize Whisper if not already done
     if state.whisper_ctx.is_none() {
@@ -395,67 +351,46 @@ pub async fn speech_start_recognition(
         println!("[Whisper] Model loaded successfully");
     }
 
-    state.is_listening = true;
-    state.audio_buffer.clear();
+    let ctx = state.whisper_ctx.as_ref().unwrap().clone();
+    drop(state);
+
+    WHISPER_LISTENING.store(true, Ordering::Relaxed);
 
     // Create channel for audio processing
     let (tx, rx) = channel::<Vec<f32>>();
-    state.audio_tx = Some(tx.clone());
 
     // Start audio processing thread
     let app_clone = app.clone();
-    let lang = language.unwrap_or_else(|| "zh".to_string());
-    let lang_clone = lang.clone();
-    let ctx = state.whisper_ctx.as_ref().unwrap().clone();
+    let lang_clone = language.clone();
 
     std::thread::spawn(move || {
         process_audio_stream(rx, ctx, app_clone, lang_clone);
     });
 
-    // Start audio recording in background
+    // Start audio recording in background using shared audio module
+    let is_listening = WHISPER_LISTENING.clone();
     std::thread::spawn(move || {
-        if let Err(e) = capture_audio(tx) {
+        if let Err(e) = audio::capture_audio(tx, is_listening) {
             println!("[Whisper] Audio capture error: {}", e);
         }
     });
 
-    drop(state);
     Ok(())
 }
 
-/// Stop speech recognition
-#[tauri::command]
-pub async fn speech_stop_recognition(app: tauri::AppHandle) -> Result<(), String> {
+/// Stop Whisper speech recognition
+pub fn stop_whisper_recognition() {
     println!("[Whisper] Stopping recognition...");
-
-    let mut state = RECOGNITION_STATE.lock().unwrap();
-    state.is_listening = false;
-
-    // Process any remaining audio
-    if !state.audio_buffer.is_empty() && state.audio_buffer.len() > 8000 {
-        // Only process if we have at least 0.5 seconds of audio
-        if let Some(tx) = state.audio_tx.as_ref() {
-            let audio_data = state.audio_buffer.clone();
-            let _ = tx.send(audio_data);
-        }
-    }
-
-    state.audio_buffer.clear();
-    state.audio_tx = None; // Drop the sender to signal processing thread to stop
-
-    drop(state);
-    Ok(())
+    WHISPER_LISTENING.store(false, Ordering::Relaxed);
 }
 
-/// Check if currently listening
-#[tauri::command]
-pub fn speech_is_listening() -> bool {
-    RECOGNITION_STATE.lock().unwrap().is_listening
+/// Check if Whisper is currently listening
+pub fn is_whisper_listening() -> bool {
+    WHISPER_LISTENING.load(Ordering::Relaxed)
 }
 
 // Get model path
 fn get_model_path() -> PathBuf {
-    // Try to find model in several locations
     let candidates = vec![
         PathBuf::from("models/ggml-base.bin"),
         PathBuf::from("../models/ggml-base.bin"),
@@ -470,7 +405,6 @@ fn get_model_path() -> PathBuf {
         }
     }
 
-    // Default to models/ggml-base.bin
     PathBuf::from("models/ggml-base.bin")
 }
 
@@ -488,7 +422,6 @@ fn process_audio_stream(
     while let Ok(audio_chunk) = rx.recv() {
         chunk_count += 1;
 
-        // 计算音频特征用于调试
         let rms = (audio_chunk.iter()
             .map(|&s| s * s)
             .sum::<f32>() / audio_chunk.len() as f32)
@@ -500,17 +433,17 @@ fn process_audio_stream(
         match transcribe_audio(&ctx, &audio_chunk, &language) {
             Ok(text) => {
                 if !text.trim().is_empty() {
-                    println!("[Whisper] ✓ Transcribed: '{}'", text);
+                    println!("[Whisper] Transcribed: '{}'", text);
                     let _ = app.emit("speech-result", SpeechRecognitionResult {
                         text,
                         is_final: false,
                     });
                 } else {
-                    println!("[Whisper] ○ No speech detected (silent or filtered)");
+                    println!("[Whisper] No speech detected (silent or filtered)");
                 }
             }
             Err(e) => {
-                println!("[Whisper] ✗ Transcription error: {}", e);
+                println!("[Whisper] Transcription error: {}", e);
             }
         }
     }
@@ -518,217 +451,32 @@ fn process_audio_stream(
     println!("[Whisper] Audio processing thread stopped (processed {} chunks)", chunk_count);
 }
 
-// Capture audio from microphone
-fn capture_audio(audio_tx: Sender<Vec<f32>>) -> Result<(), String> {
-    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-
-    println!("[Whisper] Initializing audio capture...");
-    println!("[Whisper] Note: On macOS, a permission dialog may appear on first use");
-
-    let host = cpal::default_host();
-    let device = host.default_input_device()
-        .ok_or_else(|| {
-            "找不到音频输入设备。\n\n可能原因：\n\
-            1. 没有麦克风硬件\n\
-            2. 麦克风被系统禁用\n\
-            3. 权限被拒绝\n\n\
-            请检查：系统设置 > 隐私与安全性 > 麦克风".to_string()
-        })?;
-
-    println!("[Whisper] Using input device: {}", device.name().unwrap_or_default());
-
-    let config = device.default_input_config()
-        .map_err(|e| {
-            format!("无法获取音频配置: {}\n\n\
-                    可能是麦克风权限被拒绝。\n\
-                    请检查：系统设置 > 隐私与安全性 > 麦克风\n\
-                    确保 Mat 已被启用。", e)
-        })?;
-
-    println!("[Whisper] Audio format: {:?}", config);
-
-    let sample_rate = config.sample_rate().0;
-    let channels = config.channels() as usize;
-
-    // Build audio stream
-    let err_fn = |err| eprintln!("[Whisper] Audio stream error: {}", err);
-
-    let audio_tx_clone = audio_tx.clone();
-    let stream = match config.sample_format() {
-        cpal::SampleFormat::F32 => {
-            device.build_input_stream(
-                &config.into(),
-                move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    process_audio_chunk(data, channels, sample_rate, &audio_tx_clone);
-                },
-                err_fn,
-                None,
-            )
-        }
-        cpal::SampleFormat::I16 => {
-            let audio_tx_clone2 = audio_tx.clone();
-            device.build_input_stream(
-                &config.into(),
-                move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                    let float_data: Vec<f32> = data.iter()
-                        .map(|&s| s as f32 / i16::MAX as f32)
-                        .collect();
-                    process_audio_chunk(&float_data, channels, sample_rate, &audio_tx_clone2);
-                },
-                err_fn,
-                None,
-            )
-        }
-        _ => {
-            return Err("不支持的音频采样格式".to_string());
-        }
-    }.map_err(|e| {
-        format!("无法创建音频流: {}\n\n\
-                这通常意味着麦克风权限被拒绝。\n\n\
-                解决方案：\n\
-                1. 打开：系统设置 > 隐私与安全性 > 麦克风\n\
-                2. 启用 Mat 的麦克风权限\n\
-                3. 重启 Mat 应用\n\n\
-                如果 Mat 不在列表中，说明权限请求失败。\n\
-                请尝试运行：tccutil reset Microphone com.hierifer.mat", e)
-    })?;
-
-    stream.play().map_err(|e| {
-        format!("无法启动音频流: {}\n\n\
-                请确保：\n\
-                1. 麦克风未被其他应用占用\n\
-                2. 麦克风硬件正常工作\n\
-                3. 系统音频服务正常", e)
-    })?;
-
-    println!("[Whisper] Audio capture started");
-
-    // Keep stream alive while listening
-    while RECOGNITION_STATE.lock().unwrap().is_listening {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-
-    println!("[Whisper] Audio capture stopped");
-    Ok(())
-}
-
-// Process audio chunk
-fn process_audio_chunk(data: &[f32], channels: usize, sample_rate: u32, audio_tx: &Sender<Vec<f32>>) {
-    let mut state = RECOGNITION_STATE.lock().unwrap();
-
-    if !state.is_listening {
-        return;
-    }
-
-    // Convert to mono if stereo
-    let mono_data: Vec<f32> = if channels == 2 {
-        data.chunks(2).map(|chunk| (chunk[0] + chunk[1]) / 2.0).collect()
-    } else {
-        data.to_vec()
-    };
-
-    // Resample to 16kHz if needed (Whisper expects 16kHz)
-    let resampled = if sample_rate != 16000 {
-        resample_audio(&mono_data, sample_rate, 16000)
-    } else {
-        mono_data
-    };
-
-    state.audio_buffer.extend_from_slice(&resampled);
-
-    // Transcribe every 3 seconds of audio (48000 samples at 16kHz)
-    if state.audio_buffer.len() >= 48000 {
-        let audio_chunk = state.audio_buffer.drain(..48000).collect::<Vec<f32>>();
-
-        // Send to processing thread
-        let _ = audio_tx.send(audio_chunk);
-    }
-}
-
-// Simple linear resampling
-fn resample_audio(input: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
-    if from_rate == to_rate {
-        return input.to_vec();
-    }
-
-    let ratio = from_rate as f32 / to_rate as f32;
-    let output_len = (input.len() as f32 / ratio) as usize;
-    let mut output = Vec::with_capacity(output_len);
-
-    for i in 0..output_len {
-        let src_idx = (i as f32 * ratio) as usize;
-        if src_idx < input.len() {
-            output.push(input[src_idx]);
-        }
-    }
-
-    output
-}
-
-// 检测音频是否包含语音（简单的音量检测）
-fn has_speech_activity(audio_data: &[f32]) -> bool {
-    // 计算 RMS (均方根) 音量
-    let rms = (audio_data.iter()
-        .map(|&s| s * s)
-        .sum::<f32>() / audio_data.len() as f32)
-        .sqrt();
-
-    // 音量阈值 - 低于此值认为是静音
-    const SILENCE_THRESHOLD: f32 = 0.01;
-
-    if rms < SILENCE_THRESHOLD {
-        return false;
-    }
-
-    // 检查是否有足够的非零样本
-    let non_zero_samples = audio_data.iter()
-        .filter(|&&s| s.abs() > 0.001)
-        .count();
-
-    let non_zero_ratio = non_zero_samples as f32 / audio_data.len() as f32;
-
-    // 至少 10% 的样本应该是有意义的声音
-    non_zero_ratio > 0.1
-}
-
 // Transcribe audio using Whisper
 fn transcribe_audio(ctx: &WhisperContext, audio_data: &[f32], language: &str) -> Result<String, String> {
-    // 首先检查是否有语音活动
-    if !has_speech_activity(audio_data) {
-        return Ok(String::new()); // 返回空字符串，不转录静音
+    if !audio::has_speech_activity(audio_data) {
+        return Ok(String::new());
     }
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
 
-    // Set language
     params.set_language(Some(language));
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
-
-    // 防止幻觉的关键参数
-    params.set_suppress_blank(true);  // 抑制空白输出
-    params.set_suppress_non_speech_tokens(true);  // 抑制非语音标记
-
-    // 设置温度为 0 以获得最确定的结果（减少随机性）
+    params.set_suppress_blank(true);
+    params.set_suppress_non_speech_tokens(true);
     params.set_temperature(0.0);
+    params.set_no_speech_thold(0.6);
 
-    // 提高无语音概率阈值
-    params.set_no_speech_thold(0.6);  // 默认 0.6，提高可以减少幻觉
-
-    // Create a new state for this transcription
     let mut state = ctx.create_state()
         .map_err(|e| format!("Failed to create state: {}", e))?;
 
-    // Run transcription
     state.full(params, audio_data)
         .map_err(|e| format!("Transcription failed: {}", e))?;
 
-    // Get number of segments
     let num_segments = state.full_n_segments()
         .map_err(|e| format!("Failed to get segments: {}", e))?;
 
-    // Collect all text
     let mut result = String::new();
     for i in 0..num_segments {
         if let Ok(text) = state.full_get_segment_text(i) {
@@ -738,7 +486,6 @@ fn transcribe_audio(ctx: &WhisperContext, audio_data: &[f32], language: &str) ->
 
     let result = result.trim().to_string();
 
-    // 过滤常见的 Whisper 幻觉短语
     if is_hallucination(&result) {
         println!("[Whisper] Filtered hallucination: '{}'", result);
         return Ok(String::new());
@@ -747,13 +494,11 @@ fn transcribe_audio(ctx: &WhisperContext, audio_data: &[f32], language: &str) ->
     Ok(result)
 }
 
-// 检测是否是 Whisper 的常见幻觉
 fn is_hallucination(text: &str) -> bool {
     if text.is_empty() {
         return true;
     }
 
-    // 常见的中文幻觉短语
     const CHINESE_HALLUCINATIONS: &[&str] = &[
         "你不是在那裡嗎",
         "你不是在那里吗",
@@ -766,7 +511,6 @@ fn is_hallucination(text: &str) -> bool {
         "請不要忘記訂閱",
     ];
 
-    // 常见的英文幻觉短语
     const ENGLISH_HALLUCINATIONS: &[&str] = &[
         "Thanks for watching",
         "Please subscribe",
@@ -778,19 +522,16 @@ fn is_hallucination(text: &str) -> bool {
 
     let text_lower = text.to_lowercase();
 
-    // 检查是否匹配已知幻觉
     for phrase in CHINESE_HALLUCINATIONS.iter().chain(ENGLISH_HALLUCINATIONS.iter()) {
         if text.contains(phrase) || text_lower.contains(&phrase.to_lowercase()) {
             return true;
         }
     }
 
-    // 检查是否是重复字符（另一种幻觉形式）
     if is_repetitive(text) {
         return true;
     }
 
-    // 太短的输出可能是噪音
     if text.len() < 2 {
         return true;
     }
@@ -798,21 +539,18 @@ fn is_hallucination(text: &str) -> bool {
     false
 }
 
-// 检测重复文本
 fn is_repetitive(text: &str) -> bool {
     if text.len() < 6 {
         return false;
     }
 
-    // 检查是否有字符重复超过 5 次
     let chars: Vec<char> = text.chars().collect();
-    for i in 0..chars.len() - 5 {
+    for i in 0..chars.len().saturating_sub(5) {
         if chars[i..i+5].iter().all(|&c| c == chars[i]) {
             return true;
         }
     }
 
-    // 检查是否有词组重复（如 "ABC ABC ABC"）
     let words: Vec<&str> = text.split_whitespace().collect();
     if words.len() >= 3 {
         for i in 0..words.len() - 2 {

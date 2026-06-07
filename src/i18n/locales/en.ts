@@ -33,6 +33,18 @@ export default {
       autoRestoreDesc: 'Automatically reconnect to previous tmux sessions when restarting',
       manageSession: 'Manage tmux Sessions',
     },
+    speech: {
+      title: 'Speech Recognition',
+      provider: 'Recognition Engine',
+      whisperLocal: 'Whisper (Local)',
+      alibabaCloud: 'Alibaba Cloud NLS',
+      alibabaAppKey: 'AppKey',
+      alibabaAccessKeyId: 'AccessKey ID',
+      alibabaAccessKeySecret: 'AccessKey Secret',
+      saveCredentials: 'Save',
+      credentialsSaved: 'Credentials saved',
+      alibabaDesc: 'Uses Alibaba Cloud Intelligent Speech Interaction service. Requires an Alibaba Cloud account with NLS enabled.',
+    },
   },
   sessionManager: {
     title: 'tmux Session Manager',
@@ -94,6 +106,8 @@ export default {
     downloadProgress: 'Downloading... {progress}%',
     remindLater: 'Remind Later',
     updateNow: 'Update Now',
+    restartNow: 'Restart Now',
+    readyToRestart: 'Update installed. Restart to apply the new version.',
   },
   whatsNew: {
     title: "What's New",

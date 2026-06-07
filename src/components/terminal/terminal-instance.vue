@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { Terminal } from 'xterm'
 import 'xterm/css/xterm.css'
 import { usePtySession } from '@/composables/use-pty-session'
-import { useTerminalStore, type SplitNode, type TerminalTab } from '@/stores/terminal-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
 import { useClaudeStatus } from '@/composables/use-claude-status'
 import { xtermManager, type ManagedTerminal } from '@/composables/xterm-manager'
@@ -95,21 +95,6 @@ const closeSearch = () => {
 let inputBuffer = ''
 // Track if we've received any data
 let hasReceivedData = false
-// Track if first command auto-title has been set
-let firstCommandTitleSet = false
-
-// Helper: find the tab that contains this pane
-const findTabForPane = (): TerminalTab | undefined => {
-  return store.tabs.find(t => {
-    const findPane = (node: SplitNode): boolean => {
-      if (node.type === 'pane' && node.paneId === props.paneId) return true
-      if (node.children) return node.children.some(findPane)
-      return false
-    }
-    return findPane(t.layout)
-  })
-}
-
 // Function to parse OSC 7 (current directory) from terminal output
 const parseOSC7 = (data: Uint8Array): string | null => {
   const text = new TextDecoder().decode(data)
@@ -138,6 +123,26 @@ const debouncedResize = (cols: number, rows: number) => {
       resize(cols, rows)
     }
   }, 100) as unknown as number
+}
+
+// Fit terminal while preserving scroll position
+const safeFit = () => {
+  if (!terminal || !managed?.fitAddon) return
+
+  const buffer = terminal.buffer.active
+  const wasAtBottom = buffer.viewportY >= buffer.baseY
+  const previousViewportY = buffer.viewportY
+
+  managed.fitAddon.fit()
+
+  if (wasAtBottom) {
+    terminal.scrollToBottom()
+  } else {
+    const currentViewportY = terminal.buffer.active.viewportY
+    if (currentViewportY !== previousViewportY) {
+      terminal.scrollLines(previousViewportY - currentViewportY)
+    }
+  }
 }
 
 // Check if terminal is scrolled to bottom
@@ -187,7 +192,7 @@ onMounted(async () => {
     if (terminal && fitAddon && !isUnmounting) {
       terminal.options.fontSize = newSize
       try {
-        fitAddon.fit()
+        safeFit()
       } catch (error) {
         console.warn('[Terminal] Font size fit failed:', error)
       }
@@ -211,16 +216,6 @@ onMounted(async () => {
   })
 
   // Register xterm event listeners as disposables for proper cleanup
-  xtermManager.addDisposable(paneId, terminal.onTitleChange((title) => {
-    if (title && props.paneId) {
-      const tab = findTabForPane()
-      if (tab && !tab.titleManuallySet) {
-        store.updateTabTitle(tab.id, title)
-        firstCommandTitleSet = true
-      }
-    }
-  }))
-
   xtermManager.addDisposable(paneId, terminal.onScroll(() => {
     checkScrollPosition()
   }))
@@ -246,16 +241,6 @@ onMounted(async () => {
 
     if (data === '\r' || data === '\n') {
       if (inputBuffer.trim()) {
-        if (!firstCommandTitleSet && props.paneId) {
-          const tab = findTabForPane()
-          if (tab && tab.title === 'Terminal' && !tab.titleManuallySet) {
-            const cmd = inputBuffer.trim()
-            const shortTitle = cmd.length > 40 ? cmd.substring(0, 40) + '...' : cmd
-            store.updateTabTitle(tab.id, shortTitle)
-          }
-          firstCommandTitleSet = true
-        }
-
         monitorInput(props.sessionId, inputBuffer.trim())
         if (isClaudeCommand(inputBuffer.trim())) {
           claudeStatus.startSession(props.sessionId)
@@ -323,8 +308,8 @@ onMounted(async () => {
       setTimeout(async () => {
         if (!hasReceivedData && isConnected.value && terminal) {
           console.log(`[Terminal] Tab activated but no data received for session ${props.sessionId}, triggering refresh`)
-          fitAddon?.fit()
-          const dims = fitAddon?.proposeDimensions()
+          safeFit()
+          const dims = managed?.fitAddon?.proposeDimensions()
           if (dims) {
             await resize(dims.cols, dims.rows)
           }
@@ -353,7 +338,7 @@ onMounted(async () => {
           lastKnownDimensions.rows !== proposedDims.rows
 
         if (dimsChanged) {
-          fitAddon.fit()
+          safeFit()
 
           const actualCols = terminal.cols
           const actualRows = terminal.rows

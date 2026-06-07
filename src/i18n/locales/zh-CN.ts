@@ -33,6 +33,18 @@ export default {
       autoRestoreDesc: '重启应用时自动连接到之前的 tmux 会话',
       manageSession: '管理 tmux 会话',
     },
+    speech: {
+      title: '语音识别',
+      provider: '识别引擎',
+      whisperLocal: 'Whisper（本地）',
+      alibabaCloud: '阿里云智能语音',
+      alibabaAppKey: 'AppKey',
+      alibabaAccessKeyId: 'AccessKey ID',
+      alibabaAccessKeySecret: 'AccessKey Secret',
+      saveCredentials: '保存',
+      credentialsSaved: '凭据已保存',
+      alibabaDesc: '使用阿里云智能语音交互服务，需要阿里云账号并开通 NLS 服务',
+    },
   },
   sessionManager: {
     title: 'tmux 会话管理器',
@@ -94,6 +106,8 @@ export default {
     downloadProgress: '下载中... {progress}%',
     remindLater: '稍后提醒',
     updateNow: '立即更新',
+    restartNow: '立即重启',
+    readyToRestart: '更新已安装。重启以应用新版本。',
   },
   whatsNew: {
     title: '更新内容',

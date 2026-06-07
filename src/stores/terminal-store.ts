@@ -50,6 +50,12 @@ export interface AppSettings {
   sessionMapping: Record<string, string>
 }
 
+function shortenPath(cwd: string): string {
+  return cwd
+    .replace(/^\/Users\/[^/]+/, '~')
+    .replace(/^\/home\/[^/]+/, '~')
+}
+
 export const useTerminalStore = defineStore("terminal", {
   state: () => ({
     tabs: [] as TerminalTab[],
@@ -71,6 +77,11 @@ export const useTerminalStore = defineStore("terminal", {
     autoRestoreSessions: false,
     isSessionManagerOpen: false,
     displayMode: 'tabs' as 'tabs' | 'conversation', // 布局模式
+    // Speech recognition settings
+    speechProvider: 'whisper' as 'whisper' | 'alibaba',
+    alibabaAppKey: '' as string,
+    alibabaAccessKeyId: '' as string,
+    alibabaAccessKeySecret: '' as string,
     // Transient: saved pane contents during restore (not persisted)
     _savedPaneContents: null as Record<string, string> | null,
   }),
@@ -219,7 +230,7 @@ export const useTerminalStore = defineStore("terminal", {
 
       const tab: TerminalTab = {
         id: tabId,
-        title: "Terminal",
+        title: shortenPath(cwd),
         layout: {
           type: "pane",
           paneId,
@@ -306,15 +317,31 @@ export const useTerminalStore = defineStore("terminal", {
 
     setActivePane(paneId: string) {
       this.activePaneId = paneId;
+      // Update tab title to reflect the new active pane's CWD
+      const tab = this.activeTab;
+      if (tab && !tab.titleManuallySet) {
+        const node = this.findNodeByPaneId(tab.layout, paneId);
+        if (node?.type === 'pane' && node.cwd) {
+          tab.title = shortenPath(node.cwd);
+          this.syncWindowTitle(tab.title);
+        }
+      }
     },
 
     updatePaneCwd(paneId: string, cwd: string) {
-      const tab = this.activeTab;
-      if (!tab) return;
-
-      const node = this.findNodeByPaneId(tab.layout, paneId);
-      if (node && node.type === "pane") {
-        node.cwd = cwd;
+      for (const tab of this.tabs) {
+        const node = this.findNodeByPaneId(tab.layout, paneId);
+        if (node && node.type === "pane") {
+          node.cwd = cwd;
+          // Auto-update tab title to CWD when this pane is active in this tab
+          if (!tab.titleManuallySet && paneId === this.activePaneId) {
+            tab.title = shortenPath(cwd);
+            if (tab.id === this.activeTabId) {
+              this.syncWindowTitle(tab.title);
+            }
+          }
+          break;
+        }
       }
     },
 
@@ -691,6 +718,52 @@ export const useTerminalStore = defineStore("terminal", {
     },
 
     // ============================================================================
+    // Speech Recognition Settings
+    // ============================================================================
+
+    setSpeechProvider(provider: 'whisper' | 'alibaba') {
+      this.speechProvider = provider;
+    },
+
+    async saveSpeechSettings() {
+      try {
+        // @ts-ignore
+        if (window.__TAURI_INTERNALS__) {
+          await invoke('speech_save_settings', {
+            provider: this.speechProvider,
+            alibabaAppKey: this.alibabaAppKey,
+            alibabaAccessKeyId: this.alibabaAccessKeyId,
+            alibabaAccessKeySecret: this.alibabaAccessKeySecret,
+          });
+          console.log('[Store] Speech settings saved');
+        }
+      } catch (error) {
+        console.error('Failed to save speech settings:', error);
+      }
+    },
+
+    async loadSpeechSettings() {
+      try {
+        // @ts-ignore
+        if (window.__TAURI_INTERNALS__) {
+          const settings = await invoke<{
+            provider: string;
+            alibabaAppKey: string;
+            alibabaAccessKeyId: string;
+            alibabaAccessKeySecret: string;
+          }>('speech_load_settings');
+          this.speechProvider = (settings.provider === 'alibaba' ? 'alibaba' : 'whisper');
+          this.alibabaAppKey = settings.alibabaAppKey;
+          this.alibabaAccessKeyId = settings.alibabaAccessKeyId;
+          this.alibabaAccessKeySecret = settings.alibabaAccessKeySecret;
+          console.log('[Store] Speech settings loaded (provider:', this.speechProvider, ')');
+        }
+      } catch (error) {
+        console.error('Failed to load speech settings:', error);
+      }
+    },
+
+    // ============================================================================
     // Terminal State Save / Restore (for app updates)
     // ============================================================================
 
@@ -958,9 +1031,11 @@ export const useTerminalStore = defineStore("terminal", {
         this.activePaneId = p1.paneId;
       }
 
+      // Find the active pane's CWD for the title
+      const activePaneNode = this.findNodeByPaneId(layout, this.activePaneId!);
       const tab: TerminalTab = {
         id: tabId,
-        title: 'Terminal',
+        title: shortenPath(activePaneNode?.cwd || '~'),
         layout,
         createdAt: Date.now(),
       };

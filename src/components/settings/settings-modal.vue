@@ -8,6 +8,13 @@ import { ref, watch, computed } from 'vue'
 const store = useTerminalStore()
 const { locale, t } = useI18n()
 const activeCategory = ref('Appearance')
+const speechSaveStatus = ref('')
+
+const saveSpeechSettings = async () => {
+  await store.saveSpeechSettings()
+  speechSaveStatus.value = t('settings.speech.credentialsSaved')
+  setTimeout(() => { speechSaveStatus.value = '' }, 3000)
+}
 
 const categories = [ 'Appearance', 'General', 'View', 'Shortcuts' ]
 
@@ -333,6 +340,101 @@ const themeColors = computed(() => {
             >
               {{ $t('settings.tmux.manageSession', '管理 tmux 会话') }}
             </button>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.speech.title') }}</label>
+            <div class="setting-row">
+              <label class="setting-sublabel" :style="{ color: themeColors.labelColor }">{{ $t('settings.speech.provider') }}</label>
+              <div class="radio-group">
+                <label class="radio-label">
+                  <input
+                    type="radio"
+                    name="speechProvider"
+                    value="whisper"
+                    :checked="store.speechProvider === 'whisper'"
+                    @change="store.setSpeechProvider('whisper')"
+                    class="radio-input"
+                  />
+                  <span class="radio-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.speech.whisperLocal') }}</span>
+                </label>
+                <label class="radio-label">
+                  <input
+                    type="radio"
+                    name="speechProvider"
+                    value="alibaba"
+                    :checked="store.speechProvider === 'alibaba'"
+                    @change="store.setSpeechProvider('alibaba')"
+                    class="radio-input"
+                  />
+                  <span class="radio-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.speech.alibabaCloud') }}</span>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="store.speechProvider === 'alibaba'" class="setting-row" style="margin-top: 15px;">
+              <p class="setting-description" :style="{ color: themeColors.descColor, paddingLeft: 0, marginBottom: '12px' }">
+                {{ $t('settings.speech.alibabaDesc') }}
+              </p>
+
+              <div class="credential-field">
+                <label class="credential-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.speech.alibabaAppKey') }}</label>
+                <input
+                  type="text"
+                  v-model="store.alibabaAppKey"
+                  class="select-input"
+                  :style="{
+                    background: themeColors.inputBg,
+                    borderColor: themeColors.inputBorder,
+                    color: themeColors.inputColor
+                  }"
+                />
+              </div>
+
+              <div class="credential-field">
+                <label class="credential-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.speech.alibabaAccessKeyId') }}</label>
+                <input
+                  type="text"
+                  v-model="store.alibabaAccessKeyId"
+                  class="select-input"
+                  :style="{
+                    background: themeColors.inputBg,
+                    borderColor: themeColors.inputBorder,
+                    color: themeColors.inputColor
+                  }"
+                />
+              </div>
+
+              <div class="credential-field">
+                <label class="credential-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.speech.alibabaAccessKeySecret') }}</label>
+                <input
+                  type="password"
+                  v-model="store.alibabaAccessKeySecret"
+                  class="select-input"
+                  :style="{
+                    background: themeColors.inputBg,
+                    borderColor: themeColors.inputBorder,
+                    color: themeColors.inputColor
+                  }"
+                />
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px;">
+                <button
+                  @click="saveSpeechSettings"
+                  class="font-reset-btn"
+                  :style="{
+                    background: themeColors.buttonBg,
+                    borderColor: themeColors.buttonBorder,
+                    color: themeColors.inputColor,
+                    marginLeft: 0,
+                  }"
+                >
+                  {{ $t('settings.speech.saveCredentials') }}
+                </button>
+                <span v-if="speechSaveStatus" style="font-size: 12px; color: #52c41a;">{{ speechSaveStatus }}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -719,5 +821,18 @@ const themeColors = computed(() => {
   cursor: pointer;
   accent-color: var(--accent-color);
   transition: background 0.3s;
+}
+
+.credential-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.credential-label {
+  font-size: 12px;
+  font-weight: 500;
+  transition: color 0.3s;
 }
 </style>

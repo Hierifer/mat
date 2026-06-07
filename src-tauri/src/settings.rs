@@ -10,6 +10,19 @@ pub struct AppSettings {
     pub tmux_scrollback_limit: u32, // 0 = unlimited
     pub auto_restore_sessions: bool,
     pub session_mapping: HashMap<String, String>, // paneId -> tmux session name
+    // Speech recognition settings
+    #[serde(default = "default_speech_provider")]
+    pub speech_provider: String, // "whisper" | "alibaba"
+    #[serde(default)]
+    pub alibaba_app_key: String,
+    #[serde(default)]
+    pub alibaba_access_key_id: String,
+    #[serde(default)]
+    pub alibaba_access_key_secret: String,
+}
+
+fn default_speech_provider() -> String {
+    "whisper".to_string()
 }
 
 impl Default for AppSettings {
@@ -19,6 +32,10 @@ impl Default for AppSettings {
             tmux_scrollback_limit: 0,
             auto_restore_sessions: false,
             session_mapping: HashMap::new(),
+            speech_provider: "whisper".to_string(),
+            alibaba_app_key: String::new(),
+            alibaba_access_key_id: String::new(),
+            alibaba_access_key_secret: String::new(),
         }
     }
 }

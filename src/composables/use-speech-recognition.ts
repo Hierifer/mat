@@ -1,6 +1,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { useTerminalStore } from '@/stores/terminal-store'
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -83,7 +84,17 @@ export function useSpeechRecognition() {
 
     // @ts-ignore
     if (window.__TAURI_INTERNALS__) {
-      // Running in Tauri, check native API availability (Whisper)
+      const store = useTerminalStore()
+
+      // Alibaba Cloud provider: always supported (no local model needed)
+      if (store.speechProvider === 'alibaba') {
+        useNativeAPI.value = true
+        isSupported.value = true
+        console.log('[Speech] Using Alibaba Cloud NLS')
+        return true
+      }
+
+      // Whisper provider: check native API availability
       try {
         const nativeAvailable = await invoke<boolean>('speech_check_availability')
         if (nativeAvailable) {
@@ -229,10 +240,11 @@ export function useSpeechRecognition() {
           console.log('[Speech] Error listener installed')
         }
 
-        // @ts-ignore
-        // Whisper uses 2-letter language codes: zh, en, ja, etc.
+        // Pass provider and language to backend
+        const store = useTerminalStore()
         await invoke('speech_start_recognition', {
-          language: 'zh'
+          language: 'zh',
+          provider: store.speechProvider,
         })
 
         isListening.value = true

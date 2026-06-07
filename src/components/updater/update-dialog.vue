@@ -11,13 +11,21 @@ const props = defineProps<{
 const emit = defineEmits(['close'])
 
 const { t } = useI18n()
-const { isDownloading, downloadProgress, downloadAndInstall, error } = useUpdater()
+const { isDownloading, isReadyToRestart, downloadProgress, downloadAndInstall, restartApp, error } = useUpdater()
 
 const handleUpdate = async () => {
   try {
     await downloadAndInstall()
   } catch (err) {
     console.error('Update failed:', err)
+  }
+}
+
+const handleRestart = async () => {
+  try {
+    await restartApp()
+  } catch (err) {
+    console.error('Restart failed:', err)
   }
 }
 </script>
@@ -75,6 +83,10 @@ const handleUpdate = async () => {
           </div>
           <p class="progress-text">{{ $t('updater.downloadProgress', { progress: downloadProgress }) }}</p>
         </div>
+
+        <div v-if="isReadyToRestart" class="ready-to-restart">
+          <p>{{ $t('updater.readyToRestart') }}</p>
+        </div>
       </div>
 
       <div class="update-actions">
@@ -86,7 +98,14 @@ const handleUpdate = async () => {
           {{ updateInfo ? $t('updater.remindLater') : $t('common.close') }}
         </button>
         <button
-          v-if="updateInfo"
+          v-if="updateInfo && isReadyToRestart"
+          @click="handleRestart"
+          class="btn-primary"
+        >
+          {{ $t('updater.restartNow') }}
+        </button>
+        <button
+          v-else-if="updateInfo"
           @click="handleUpdate"
           :disabled="isDownloading"
           class="btn-primary"
@@ -318,6 +337,22 @@ const handleUpdate = async () => {
   font-size: 14px;
   font-weight: 500;
   margin: 0;
+}
+
+.ready-to-restart {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(82, 196, 26, 0.1);
+  border: 1px solid rgba(82, 196, 26, 0.3);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.ready-to-restart p {
+  margin: 0;
+  color: #52c41a;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .update-actions {

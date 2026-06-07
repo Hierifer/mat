@@ -208,6 +208,10 @@ pub fn run() {
             speech::speech_list_devices,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             speech::speech_test_microphone,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            speech::speech_save_settings,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            speech::speech_load_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

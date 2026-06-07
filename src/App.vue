@@ -153,6 +153,9 @@ onMounted(async () => {
   // Initialize tmux first
   await terminalStore.initTmux()
 
+  // Load speech recognition settings
+  await terminalStore.loadSpeechSettings()
+
   // Create initial tab or restore sessions
   try {
     // Check if there's saved terminal state from an update
