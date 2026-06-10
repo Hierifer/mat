@@ -38,7 +38,11 @@ declare global {
   }
 }
 
-export function useSpeechRecognition() {
+export interface SpeechRecognitionOptions {
+  onResult?: (text: string, isFinal: boolean) => void
+}
+
+export function useSpeechRecognition(options?: SpeechRecognitionOptions) {
   const isListening = ref(false)
   const transcript = ref('')
   const interimTranscript = ref('')
@@ -112,6 +116,7 @@ export function useSpeechRecognition() {
       // On macOS with Tauri, Web Speech API doesn't work
       if (isMacOS.value) {
         isSupported.value = false
+        error.value = 'macOS WebView 不支持 Web Speech API，请在设置中配置阿里云语音识别或安装 Whisper 模型。'
         console.warn('[Speech] Running on macOS - Web Speech API not supported in WKWebView, native API not available')
         return false
       } else {
@@ -127,9 +132,9 @@ export function useSpeechRecognition() {
     return false
   }
 
-  // Initialize speech recognition
+  // Initialize speech recognition (only for Web Speech API on non-macOS)
   const initRecognition = () => {
-    if (!checkSupport()) return null
+    if (!isSupported.value || useNativeAPI.value) return null
 
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
     recognition = new SpeechRecognitionAPI()
@@ -196,6 +201,11 @@ export function useSpeechRecognition() {
       if (final) {
         transcript.value += final
         console.log('[Speech] Final transcript:', final)
+        options?.onResult?.(final, true)
+      }
+
+      if (interim) {
+        options?.onResult?.(interim, false)
       }
 
       interimTranscript.value = interim
@@ -225,6 +235,7 @@ export function useSpeechRecognition() {
             } else {
               interimTranscript.value = result.text
             }
+            options?.onResult?.(result.text, result.is_final)
           })
           console.log('[Speech] Result listener installed')
         }
@@ -306,7 +317,10 @@ export function useSpeechRecognition() {
       await stop()
     } else {
       // Check support first
-      await checkSupport()
+      const supported = await checkSupport()
+      if (!supported) {
+        return
+      }
 
       // Request microphone permission before starting
       if (useNativeAPI.value) {

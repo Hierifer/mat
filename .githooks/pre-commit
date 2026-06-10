@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pre-commit hook: auto-generate changelog from git history
+
+node scripts/generate-changelog.mjs
+
+# Stage the generated files
+git add src/data/changelog.yaml src/data/changelog.ts

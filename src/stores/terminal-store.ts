@@ -79,9 +79,7 @@ export const useTerminalStore = defineStore("terminal", {
     displayMode: 'tabs' as 'tabs' | 'conversation', // 布局模式
     // Speech recognition settings
     speechProvider: 'whisper' as 'whisper' | 'alibaba',
-    alibabaAppKey: '' as string,
-    alibabaAccessKeyId: '' as string,
-    alibabaAccessKeySecret: '' as string,
+    alibabaApiKey: '' as string,
     // Transient: saved pane contents during restore (not persisted)
     _savedPaneContents: null as Record<string, string> | null,
   }),
@@ -731,9 +729,7 @@ export const useTerminalStore = defineStore("terminal", {
         if (window.__TAURI_INTERNALS__) {
           await invoke('speech_save_settings', {
             provider: this.speechProvider,
-            alibabaAppKey: this.alibabaAppKey,
-            alibabaAccessKeyId: this.alibabaAccessKeyId,
-            alibabaAccessKeySecret: this.alibabaAccessKeySecret,
+            alibabaApiKey: this.alibabaApiKey,
           });
           console.log('[Store] Speech settings saved');
         }
@@ -748,14 +744,10 @@ export const useTerminalStore = defineStore("terminal", {
         if (window.__TAURI_INTERNALS__) {
           const settings = await invoke<{
             provider: string;
-            alibabaAppKey: string;
-            alibabaAccessKeyId: string;
-            alibabaAccessKeySecret: string;
+            alibabaApiKey: string;
           }>('speech_load_settings');
           this.speechProvider = (settings.provider === 'alibaba' ? 'alibaba' : 'whisper');
-          this.alibabaAppKey = settings.alibabaAppKey;
-          this.alibabaAccessKeyId = settings.alibabaAccessKeyId;
-          this.alibabaAccessKeySecret = settings.alibabaAccessKeySecret;
+          this.alibabaApiKey = settings.alibabaApiKey;
           console.log('[Store] Speech settings loaded (provider:', this.speechProvider, ')');
         }
       } catch (error) {

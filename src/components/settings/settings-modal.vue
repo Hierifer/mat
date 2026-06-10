@@ -378,38 +378,10 @@ const themeColors = computed(() => {
               </p>
 
               <div class="credential-field">
-                <label class="credential-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.speech.alibabaAppKey') }}</label>
-                <input
-                  type="text"
-                  v-model="store.alibabaAppKey"
-                  class="select-input"
-                  :style="{
-                    background: themeColors.inputBg,
-                    borderColor: themeColors.inputBorder,
-                    color: themeColors.inputColor
-                  }"
-                />
-              </div>
-
-              <div class="credential-field">
-                <label class="credential-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.speech.alibabaAccessKeyId') }}</label>
-                <input
-                  type="text"
-                  v-model="store.alibabaAccessKeyId"
-                  class="select-input"
-                  :style="{
-                    background: themeColors.inputBg,
-                    borderColor: themeColors.inputBorder,
-                    color: themeColors.inputColor
-                  }"
-                />
-              </div>
-
-              <div class="credential-field">
-                <label class="credential-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.speech.alibabaAccessKeySecret') }}</label>
+                <label class="credential-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.speech.alibabaApiKey') }}</label>
                 <input
                   type="password"
-                  v-model="store.alibabaAccessKeySecret"
+                  v-model="store.alibabaApiKey"
                   class="select-input"
                   :style="{
                     background: themeColors.inputBg,

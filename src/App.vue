@@ -29,88 +29,67 @@ const { t } = useI18n()
 // Notification system
 const { notifyTaskComplete, notifySuccess, notifyInfo } = useNotification()
 
-// Speech recognition (Web Speech API)
-const {
-  isListening,
-  transcript,
-  displayTranscript,
-  error: speechError,
-  toggle: toggleSpeech,
-  stop: stopSpeech,
-  clear: clearTranscript,
-} = useSpeechRecognition()
+// Speech recognition — streaming to terminal
+let lastInterimCharCount = 0
 
-// Send speech text to active terminal
-const sendToTerminal = async (text: string) => {
+const getActiveSessionId = (): string | undefined => {
   const activeTab = terminalStore.activeTab
-  if (!activeTab) {
-    console.warn('[Speech] No active tab')
-    return
-  }
-
-  // Find the active pane's sessionId
-  let sessionId: string | undefined
-
-  const findSessionId = (node: any): string | undefined => {
-    if (node.type === 'pane' && node.paneId === terminalStore.activePaneId) {
-      return node.sessionId
-    }
+  if (!activeTab) return undefined
+  const find = (node: any): string | undefined => {
+    if (node.type === 'pane' && node.paneId === terminalStore.activePaneId) return node.sessionId
     if (node.children) {
       for (const child of node.children) {
-        const found = findSessionId(child)
+        const found = find(child)
         if (found) return found
       }
     }
     return undefined
   }
+  return find(activeTab.layout)
+}
 
-  sessionId = findSessionId(activeTab.layout)
-
-  if (!sessionId) {
-    console.warn('[Speech] No active session found')
-    return
-  }
+const handleSpeechResult = async (text: string, isFinal: boolean) => {
+  const sessionId = getActiveSessionId()
+  if (!sessionId) return
 
   try {
     // @ts-ignore
-    if (window.__TAURI_INTERNALS__) {
-      // Convert string to UTF-8 byte array
-      const encoder = new TextEncoder()
-      const bytes = encoder.encode(text)
+    if (!window.__TAURI_INTERNALS__) return
 
-      await invoke('pty_write', {
-        sessionId,
-        data: Array.from(bytes),
-      })
-      console.log(`[Speech] Sent to terminal: "${text}"`)
+    const encoder = new TextEncoder()
+    // Backspace to erase previous interim text, then type new text — single atomic write
+    const backspaces = new Uint8Array(lastInterimCharCount).fill(0x7f)
+    const textBytes = encoder.encode(text)
+    const combined = new Uint8Array(backspaces.length + textBytes.length)
+    combined.set(backspaces, 0)
+    combined.set(textBytes, backspaces.length)
+
+    await invoke('pty_write', { sessionId, data: Array.from(combined) })
+
+    if (isFinal) {
+      lastInterimCharCount = 0
     } else {
-      console.log(`[Speech] Mock mode - would send: "${text}"`)
+      lastInterimCharCount = Array.from(text).length
     }
-  } catch (error) {
-    console.error('[Speech] Failed to send to terminal:', error)
+  } catch (err) {
+    console.error('[Speech] Failed to write to terminal:', err)
   }
 }
 
-// Watch for transcript changes and send to terminal
-let lastSentLength = 0
-watch(transcript, (newTranscript) => {
-  if (newTranscript.length > lastSentLength && isListening.value) {
-    const newText = newTranscript.substring(lastSentLength)
-    if (newText.trim()) {
-      sendToTerminal(newText)
-      lastSentLength = newTranscript.length
-    }
-  }
-})
+const {
+  isListening,
+  displayTranscript,
+  error: speechError,
+  toggle: toggleSpeech,
+  stop: stopSpeech,
+  clear: clearTranscript,
+} = useSpeechRecognition({ onResult: handleSpeechResult })
 
 // Reset when speech stops
 watch(isListening, (listening) => {
   if (!listening) {
-    lastSentLength = 0
-    // Clear transcript after a short delay
-    setTimeout(() => {
-      clearTranscript()
-    }, 1000)
+    lastInterimCharCount = 0
+    setTimeout(() => clearTranscript(), 1000)
   }
 })
 

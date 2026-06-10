@@ -6,8 +6,10 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 
 /// Capture audio from the default input device and send chunks via the channel.
+/// `chunk_size` controls how many 16kHz samples to accumulate before sending
+/// (e.g., 1600 = 100ms for real-time streaming, 48000 = 3s for batch processing).
 /// Stops when `is_listening` is set to false.
-pub fn capture_audio(audio_tx: Sender<Vec<f32>>, is_listening: Arc<AtomicBool>) -> Result<(), String> {
+pub fn capture_audio(audio_tx: Sender<Vec<f32>>, is_listening: Arc<AtomicBool>, chunk_size: usize) -> Result<(), String> {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
     println!("[Audio] Initializing audio capture...");
@@ -56,9 +58,8 @@ pub fn capture_audio(audio_tx: Sender<Vec<f32>>, is_listening: Arc<AtomicBool>) 
                     let processed = preprocess_audio(data, channels, sample_rate);
                     let mut buf = buffer_clone.lock().unwrap();
                     buf.extend_from_slice(&processed);
-                    // Send chunks of ~3 seconds (48000 samples at 16kHz)
-                    while buf.len() >= 48000 {
-                        let chunk: Vec<f32> = buf.drain(..48000).collect();
+                    while buf.len() >= chunk_size {
+                        let chunk: Vec<f32> = buf.drain(..chunk_size).collect();
                         let _ = audio_tx_clone.send(chunk);
                     }
                 },
@@ -82,8 +83,8 @@ pub fn capture_audio(audio_tx: Sender<Vec<f32>>, is_listening: Arc<AtomicBool>) 
                     let processed = preprocess_audio(&float_data, channels, sample_rate);
                     let mut buf = buffer_clone2.lock().unwrap();
                     buf.extend_from_slice(&processed);
-                    while buf.len() >= 48000 {
-                        let chunk: Vec<f32> = buf.drain(..48000).collect();
+                    while buf.len() >= chunk_size {
+                        let chunk: Vec<f32> = buf.drain(..chunk_size).collect();
                         let _ = audio_tx_clone2.send(chunk);
                     }
                 },
@@ -123,7 +124,7 @@ pub fn capture_audio(audio_tx: Sender<Vec<f32>>, is_listening: Arc<AtomicBool>) 
     // Flush remaining buffer
     {
         let mut buf = buffer.lock().unwrap();
-        if buf.len() > 8000 {
+        if !buf.is_empty() {
             let remaining = buf.drain(..).collect::<Vec<f32>>();
             let _ = audio_tx.send(remaining);
         }

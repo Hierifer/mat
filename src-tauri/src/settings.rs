@@ -14,11 +14,7 @@ pub struct AppSettings {
     #[serde(default = "default_speech_provider")]
     pub speech_provider: String, // "whisper" | "alibaba"
     #[serde(default)]
-    pub alibaba_app_key: String,
-    #[serde(default)]
-    pub alibaba_access_key_id: String,
-    #[serde(default)]
-    pub alibaba_access_key_secret: String,
+    pub alibaba_api_key: String,
 }
 
 fn default_speech_provider() -> String {
@@ -33,9 +29,7 @@ impl Default for AppSettings {
             auto_restore_sessions: false,
             session_mapping: HashMap::new(),
             speech_provider: "whisper".to_string(),
-            alibaba_app_key: String::new(),
-            alibaba_access_key_id: String::new(),
-            alibaba_access_key_secret: String::new(),
+            alibaba_api_key: String::new(),
         }
     }
 }

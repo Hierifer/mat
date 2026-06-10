@@ -370,7 +370,7 @@ pub fn start_whisper_recognition(
     // Start audio recording in background using shared audio module
     let is_listening = WHISPER_LISTENING.clone();
     std::thread::spawn(move || {
-        if let Err(e) = audio::capture_audio(tx, is_listening) {
+        if let Err(e) = audio::capture_audio(tx, is_listening, 48000) {
             println!("[Whisper] Audio capture error: {}", e);
         }
     });

@@ -1,5 +1,5 @@
 // Speech recognition module
-// Supports Whisper (local) and Alibaba Cloud NLS providers
+// Supports Whisper (local) and DashScope Paraformer providers
 
 pub mod audio;
 pub mod whisper;
@@ -48,32 +48,15 @@ pub async fn speech_start_recognition(
 
     match provider.as_str() {
         "alibaba" => {
-            println!("[Speech] Starting Alibaba Cloud NLS recognition");
-            // Load credentials from settings
+            println!("[Speech] Starting DashScope Paraformer recognition");
             let settings = AppSettings::load()
                 .map_err(|e| format!("Failed to load settings: {}", e))?;
 
-            if settings.alibaba_app_key.is_empty()
-                || settings.alibaba_access_key_id.is_empty()
-                || settings.alibaba_access_key_secret.is_empty()
-            {
-                return Err("阿里云语音识别凭据未配置。请在设置中填写 AppKey、AccessKey ID 和 AccessKey Secret。".to_string());
+            if settings.alibaba_api_key.is_empty() {
+                return Err("DashScope API Key 未配置，请在设置中填写。".to_string());
             }
 
-            // Generate token
-            let token = alibaba::get_token(
-                &settings.alibaba_access_key_id,
-                &settings.alibaba_access_key_secret,
-            ).await?;
-
-            // Start recognition
-            alibaba::start_recognition(
-                app,
-                settings.alibaba_app_key,
-                token,
-                lang,
-            )?;
-
+            alibaba::start_recognition(app, settings.alibaba_api_key, lang)?;
             Ok(())
         }
         _ => {
@@ -110,17 +93,13 @@ pub fn speech_is_listening() -> bool {
 #[tauri::command]
 pub async fn speech_save_settings(
     provider: String,
-    alibaba_app_key: String,
-    alibaba_access_key_id: String,
-    alibaba_access_key_secret: String,
+    alibaba_api_key: String,
 ) -> Result<(), String> {
     let mut settings = AppSettings::load()
         .map_err(|e| format!("Failed to load settings: {}", e))?;
 
     settings.speech_provider = provider;
-    settings.alibaba_app_key = alibaba_app_key;
-    settings.alibaba_access_key_id = alibaba_access_key_id;
-    settings.alibaba_access_key_secret = alibaba_access_key_secret;
+    settings.alibaba_api_key = alibaba_api_key;
 
     settings.save()
         .map_err(|e| format!("Failed to save settings: {}", e))?;
@@ -137,9 +116,7 @@ pub async fn speech_load_settings() -> Result<SpeechSettings, String> {
 
     Ok(SpeechSettings {
         provider: settings.speech_provider,
-        alibaba_app_key: settings.alibaba_app_key,
-        alibaba_access_key_id: settings.alibaba_access_key_id,
-        alibaba_access_key_secret: settings.alibaba_access_key_secret,
+        alibaba_api_key: settings.alibaba_api_key,
     })
 }
 
@@ -147,7 +124,5 @@ pub async fn speech_load_settings() -> Result<SpeechSettings, String> {
 #[serde(rename_all = "camelCase")]
 pub struct SpeechSettings {
     pub provider: String,
-    pub alibaba_app_key: String,
-    pub alibaba_access_key_id: String,
-    pub alibaba_access_key_secret: String,
+    pub alibaba_api_key: String,
 }
