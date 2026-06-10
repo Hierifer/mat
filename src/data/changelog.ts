@@ -8,6 +8,19 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.4.1': {
+    date: '2026-06-10',
+    features: [
+      'migrate speech recognition to DashScope with real-time streaming',
+      'add Alibaba Cloud speech recognition, manual update restart, and fix xterm scroll jump',
+      'add XTermManager for centralized terminal lifecycle and resource recycling',
+    ],
+    fixes: [
+      'skip update prompt when current version matches remote',
+      'request macOS folder access permissions on startup',
+      'add process plugin for relaunch ACL permission',
+    ],
+  },
   '1.3.2': {
     date: '2026-06-02',
     features: [
@@ -88,15 +101,6 @@ export const changelog: Record<string, ChangelogEntry> = {
       'skip DMG bundling on macOS, only build .app for App Store',
       'remove invalid deb copyright field and fix nsis language schema',
       'update gitignore paths and terminal layout after restructuring',
-    ],
-  },
-  '0.2.1': {
-    date: '2026-04-05',
-    features: [],
-    fixes: [
-      'Aggressive fix for xterm selection position growth',
-      'Prevent infinite row growth in xterm buffer',
-      'Prevent terminal renderer crash on split pane creation',
     ],
   },
 }
