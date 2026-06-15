@@ -858,6 +858,12 @@ export const useTerminalStore = defineStore("terminal", {
           this.activePaneId = state.activePaneId
         }
 
+        // Sync window title for the restored active tab
+        const activeTab = this.tabs.find(t => t.id === this.activeTabId)
+        if (activeTab) {
+          this.syncWindowTitle(activeTab.title)
+        }
+
         console.log(`[Store] Terminal state restored (${this.tabs.length} tabs)`)
 
         // Clean up saved state after a delay (give terminals time to mount and read content)
@@ -919,20 +925,10 @@ export const useTerminalStore = defineStore("terminal", {
         if (window.__TAURI_INTERNALS__) {
           const response = await invoke<{ session_id: string; cwd: string }>(
             'pty_spawn',
-            { cols: 80, rows: 24 },
+            { cols: 80, rows: 24, cwd: cwd || undefined },
           );
           sessionId = response.session_id;
           resolvedCwd = response.cwd;
-
-          // cd to the saved cwd if different
-          if (cwd && cwd !== '~' && cwd !== resolvedCwd) {
-            const encoder = new TextEncoder()
-            const cdCmd = `cd ${JSON.stringify(cwd)}\n`
-            await invoke('pty_write', {
-              sessionId,
-              data: Array.from(encoder.encode(cdCmd)),
-            })
-          }
         }
       } catch (error) {
         console.error('Failed to spawn PTY session:', error);

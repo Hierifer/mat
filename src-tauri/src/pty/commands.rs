@@ -20,22 +20,29 @@ pub async fn pty_spawn(
     rows: u16,
     tmux_enabled: Option<bool>,
     tmux_session_name: Option<String>,
+    cwd: Option<String>,
 ) -> Result<PtySpawnResponse, String> {
     let tmux_enabled = tmux_enabled.unwrap_or(false);
+
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| "~".to_string());
+
+    // Use provided cwd if it's a valid directory, otherwise fall back to home
+    let resolved_cwd = match &cwd {
+        Some(dir) if std::path::Path::new(dir).is_dir() => dir.clone(),
+        _ => home,
+    };
+
     let session_id = manager
         .lock()
         .await
-        .spawn_shell(cols, rows, app_handle, tmux_enabled, tmux_session_name)
+        .spawn_shell(cols, rows, app_handle, tmux_enabled, tmux_session_name, cwd)
         .await?;
-
-    // Get user's home directory as the initial cwd
-    let cwd = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE")) // Windows fallback
-        .unwrap_or_else(|_| "~".to_string());
 
     Ok(PtySpawnResponse {
         session_id,
-        cwd,
+        cwd: resolved_cwd,
     })
 }
 
@@ -99,7 +106,7 @@ pub async fn tmux_attach_session(
     let session_id = manager
         .lock()
         .await
-        .spawn_shell(cols, rows, app_handle, true, Some(name.clone()))
+        .spawn_shell(cols, rows, app_handle, true, Some(name.clone()), None)
         .await?;
 
     let cwd = std::env::var("HOME")

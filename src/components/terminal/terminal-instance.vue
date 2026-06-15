@@ -329,20 +329,19 @@ onMounted(async () => {
       if (isUnmounting || !fitAddon || !terminal) return
 
       try {
-        const proposedDims = fitAddon.proposeDimensions()
-        if (!proposedDims) return
+        safeFit()
 
+        const actualCols = terminal.cols
+        const actualRows = terminal.rows
+
+        // Only send resize to backend (triggers SIGWINCH) when dimensions actually changed.
+        // This avoids unnecessary SIGWINCH that causes TUI apps to redraw and reset scroll.
         const dimsChanged =
           !lastKnownDimensions ||
-          lastKnownDimensions.cols !== proposedDims.cols ||
-          lastKnownDimensions.rows !== proposedDims.rows
+          lastKnownDimensions.cols !== actualCols ||
+          lastKnownDimensions.rows !== actualRows
 
         if (dimsChanged) {
-          safeFit()
-
-          const actualCols = terminal.cols
-          const actualRows = terminal.rows
-
           lastKnownDimensions = {
             cols: actualCols,
             rows: actualRows,

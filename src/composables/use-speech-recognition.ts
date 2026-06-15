@@ -228,7 +228,6 @@ export function useSpeechRecognition(options?: SpeechRecognitionOptions) {
         if (!unlistenResult) {
           unlistenResult = await listen('speech-result', (event: any) => {
             const result = event.payload as { text: string; is_final: boolean }
-            console.log('[Speech] Result received:', result)
             if (result.is_final) {
               transcript.value += result.text
               interimTranscript.value = ''

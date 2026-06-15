@@ -29,9 +29,9 @@ const { t } = useI18n()
 // Notification system
 const { notifyTaskComplete, notifySuccess, notifyInfo } = useNotification()
 
-// Speech recognition — streaming to terminal
-let lastInterimCharCount = 0
-
+// Speech recognition — send only final results to terminal
+// Interim results are displayed in the speech indicator UI only.
+// This avoids DEL/backspace sequences that don't work in TUI apps (e.g. Claude Code).
 const getActiveSessionId = (): string | undefined => {
   const activeTab = terminalStore.activeTab
   if (!activeTab) return undefined
@@ -49,6 +49,8 @@ const getActiveSessionId = (): string | undefined => {
 }
 
 const handleSpeechResult = async (text: string, isFinal: boolean) => {
+  if (!isFinal) return
+
   const sessionId = getActiveSessionId()
   if (!sessionId) return
 
@@ -57,20 +59,8 @@ const handleSpeechResult = async (text: string, isFinal: boolean) => {
     if (!window.__TAURI_INTERNALS__) return
 
     const encoder = new TextEncoder()
-    // Backspace to erase previous interim text, then type new text — single atomic write
-    const backspaces = new Uint8Array(lastInterimCharCount).fill(0x7f)
     const textBytes = encoder.encode(text)
-    const combined = new Uint8Array(backspaces.length + textBytes.length)
-    combined.set(backspaces, 0)
-    combined.set(textBytes, backspaces.length)
-
-    await invoke('pty_write', { sessionId, data: Array.from(combined) })
-
-    if (isFinal) {
-      lastInterimCharCount = 0
-    } else {
-      lastInterimCharCount = Array.from(text).length
-    }
+    await invoke('pty_write', { sessionId, data: Array.from(textBytes) })
   } catch (err) {
     console.error('[Speech] Failed to write to terminal:', err)
   }
@@ -88,7 +78,6 @@ const {
 // Reset when speech stops
 watch(isListening, (listening) => {
   if (!listening) {
-    lastInterimCharCount = 0
     setTimeout(() => clearTranscript(), 1000)
   }
 })
