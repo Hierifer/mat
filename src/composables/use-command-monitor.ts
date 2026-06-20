@@ -37,13 +37,11 @@ export function useCommandMonitor() {
   ]
 
   // Special Claude completion patterns
+  // NOTE: Patterns must be strict to avoid false positives. Previously
+  // /done/i matched any line containing "done", causing premature
+  // completion detection during normal Claude Code output.
   const claudeCompletionPatterns = [
-    /task\s+complete/i,
-    /done/i,
-    /finished/i,
-    /successfully\s+completed/i,
-    /\[✓\]/,
-    /✅/,
+    /^\s*\$\s*$/,              // Clean shell prompt (task truly finished)
   ]
 
   /**

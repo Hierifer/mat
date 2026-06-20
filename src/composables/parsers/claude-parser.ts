@@ -85,18 +85,17 @@ export class ClaudeOutputParser implements OutputParser<ClaudeMetrics> {
 
   /**
    * Detect Claude completion markers
+   *
+   * NOTE: Patterns must be strict to avoid false positives during normal
+   * Claude Code output. Loose patterns like /done/i would match any line
+   * containing "done" (e.g. "When that's done..."), causing premature
+   * task completion → status bar toggle → terminal resize → SIGWINCH →
+   * Claude Code TUI scroll reset.
    */
-  isComplete(line: string): boolean {
-    const completionPatterns = [
-      /task\s+complete/i,
-      /done/i,
-      /finished/i,
-      /successfully\s+completed/i,
-      /\[✓\]/,
-      /✅/,
-    ]
-
-    return completionPatterns.some(pattern => pattern.test(line))
+  isComplete(_line: string): boolean {
+    // Disabled: rely on completionDelay timeout in useTaskStatus instead.
+    // Claude Code's output is too varied for reliable pattern matching.
+    return false
   }
 }
 

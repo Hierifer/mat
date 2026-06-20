@@ -66,6 +66,19 @@ const handleSpeechResult = async (text: string, isFinal: boolean) => {
   }
 }
 
+const sendToTerminal = async (text: string) => {
+  const sessionId = getActiveSessionId()
+  if (!sessionId) return
+
+  try {
+    const encoder = new TextEncoder()
+    const data = Array.from(encoder.encode(text))
+    await invoke('pty_write', { sessionId, data })
+  } catch (err) {
+    console.error('[App] Failed to write to terminal:', err)
+  }
+}
+
 const {
   isListening,
   displayTranscript,

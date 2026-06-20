@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { Terminal } from 'xterm'
 import 'xterm/css/xterm.css'
+import { invoke } from '@tauri-apps/api/core'
 import { usePtySession } from '@/composables/use-pty-session'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
@@ -165,6 +166,39 @@ const scrollToBottom = () => {
   }
 }
 
+// Handle image paste from clipboard
+const handlePaste = async (event: ClipboardEvent) => {
+  const items = event.clipboardData?.items
+  if (!items) return
+
+  let imageItem: DataTransferItem | null = null
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.startsWith('image/')) {
+      imageItem = items[i]
+      break
+    }
+  }
+
+  if (!imageItem) return // No image — let xterm handle text paste
+
+  event.preventDefault()
+  event.stopPropagation()
+
+  const mimeType = imageItem.type
+  const blob = imageItem.getAsFile()
+  if (!blob) return
+
+  try {
+    const buffer = await blob.arrayBuffer()
+    const data = Array.from(new Uint8Array(buffer))
+    const path: string = await invoke('save_clipboard_image', { data, mimeType })
+    const escapedPath = "'" + path.replace(/'/g, "'\\''") + "'"
+    write(escapedPath)
+  } catch (err) {
+    console.error('[Terminal] Failed to paste image:', err)
+  }
+}
+
 onMounted(async () => {
   console.log(`[Terminal] Mounting terminal for session: ${props.sessionId}`)
   if (!terminalRef.value || !props.paneId) return
@@ -214,6 +248,15 @@ onMounted(async () => {
     }
     return true
   })
+
+  // Register image paste handler on the terminal element (capture phase)
+  const terminalElement = terminal.element
+  if (terminalElement) {
+    terminalElement.addEventListener('paste', handlePaste as EventListener, { capture: true })
+    xtermManager.addCleanup(paneId, () => {
+      terminalElement.removeEventListener('paste', handlePaste as EventListener, { capture: true })
+    })
+  }
 
   // Register xterm event listeners as disposables for proper cleanup
   xtermManager.addDisposable(paneId, terminal.onScroll(() => {

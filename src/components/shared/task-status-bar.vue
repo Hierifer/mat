@@ -67,9 +67,12 @@ const renderedMetrics = computed(() => {
 
 <style scoped>
 .task-status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   width: 100%;
   height: 28px;
-  flex-shrink: 0;
   z-index: 500;
 
   display: flex;
@@ -85,6 +88,8 @@ const renderedMetrics = computed(() => {
   color: #aaa;
   user-select: none;
   box-sizing: border-box;
+  pointer-events: auto;
+  border-radius: 0 0 10px 10px;
 }
 
 .status-left {
@@ -181,11 +186,12 @@ const renderedMetrics = computed(() => {
 /* Slide transition */
 .statusbar-slide-enter-active,
 .statusbar-slide-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .statusbar-slide-enter-from,
 .statusbar-slide-leave-to {
   opacity: 0;
+  transform: translateY(100%);
 }
 </style>

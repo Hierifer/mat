@@ -65,6 +65,7 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
   const metrics = ref<T>({} as T)
 
   let completionTimer: ReturnType<typeof setTimeout> | null = null
+  let inactivityTimer: ReturnType<typeof setTimeout> | null = null
 
   /**
    * Start tracking a new task
@@ -80,13 +81,23 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
       clearTimeout(completionTimer)
       completionTimer = null
     }
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer)
+      inactivityTimer = null
+    }
   }
 
   /**
    * Process task output and extract status/metrics
    */
   const processOutput = (sid: string, raw: string) => {
-    if (!isRunning.value || sessionId.value !== sid) return
+    if (sessionId.value !== sid) return
+
+    // Re-activate if we receive output for a tracked session that was
+    // auto-ended by the inactivity timer (e.g. after a long thinking pause)
+    if (!isRunning.value && sessionId.value === sid) {
+      isRunning.value = true
+    }
 
     // Strip formatting if parser provides it
     const cleaned = parser.stripFormatting ? parser.stripFormatting(raw) : raw
@@ -119,6 +130,16 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
         currentAction.value = ''
       }
     }, completionDelay)
+
+    // Reset inactivity timer — end task after prolonged silence.
+    // This handles the case where isComplete patterns are disabled or
+    // unreliable. If output resumes later, processOutput re-activates.
+    if (inactivityTimer) clearTimeout(inactivityTimer)
+    inactivityTimer = setTimeout(() => {
+      if (isRunning.value) {
+        endTask()
+      }
+    }, completionDelay * 5) // 15s default (5× completionDelay)
   }
 
   /**
@@ -163,6 +184,10 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
     if (completionTimer) {
       clearTimeout(completionTimer)
       completionTimer = null
+    }
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer)
+      inactivityTimer = null
     }
   }
 
