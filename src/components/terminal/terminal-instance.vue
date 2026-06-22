@@ -166,6 +166,17 @@ const scrollToBottom = () => {
   }
 }
 
+// Ensure terminal gets focus when clicking anywhere in the terminal area.
+// xterm.js only handles mousedown on its own xterm-screen element;
+// clicks on the container padding or empty space below rows won't focus
+// the hidden textarea, leaving keyboard input broken.
+const handleTerminalAreaMousedown = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  // Don't steal focus from search bar or buttons
+  if (target.closest('.search-bar') || target.closest('.scroll-to-bottom-btn')) return
+  terminal?.focus()
+}
+
 // Handle image paste from clipboard
 const handlePaste = async (event: ClipboardEvent) => {
   const items = event.clipboardData?.items
@@ -418,7 +429,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="terminal-wrapper">
+  <div class="terminal-wrapper" @mousedown="handleTerminalAreaMousedown">
     <!-- Search Bar -->
     <transition name="search-slide">
       <div v-if="showSearchBar" class="search-bar">

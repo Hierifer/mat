@@ -26,13 +26,19 @@ export interface ClaudeStatus {
   sessionId: string | null
 }
 
+// Module-level shared state — single Claude status tracker per app.
+// All consumers (terminal-instance, claude-status-bar) share the same refs.
+const _parser = new ClaudeOutputParser()
+const _shared = useTaskStatus<ClaudeMetrics>(_parser, {
+  completionDelay: 3000,
+  metricsRetentionDelay: 5000,
+})
+
 /**
  * Claude-specific task status tracker
  * Wraps the generic useTaskStatus with Claude-specific parser
  */
 export function useClaudeStatus() {
-  const parser = new ClaudeOutputParser()
-
   const {
     isRunning,
     currentAction,
@@ -42,10 +48,7 @@ export function useClaudeStatus() {
     startTask,
     processOutput: processTaskOutput,
     endTask,
-  } = useTaskStatus<ClaudeMetrics>(parser, {
-    completionDelay: 3000,
-    metricsRetentionDelay: 5000,
-  })
+  } = _shared
 
   // Map metrics to legacy 'usage' interface for backwards compatibility
   const usage = computed<ClaudeUsage>(() => ({
@@ -84,6 +87,9 @@ export function useClaudeStatus() {
     endTask()
   }
 
+  // Whether the Claude status bar overlay should be visible
+  const statusBarVisible = computed(() => isRunning.value || hasMetrics.value)
+
   return {
     // Backwards compatible exports
     isRunning,
@@ -91,6 +97,7 @@ export function useClaudeStatus() {
     usage,
     sessionId,
     hasUsage: hasMetrics,
+    statusBarVisible,
     contextWidth,
     contextColor,
     formatTokens,
