@@ -82,6 +82,8 @@ export const useTerminalStore = defineStore("terminal", {
     alibabaApiKey: '' as string,
     // Transient: saved pane contents during restore (not persisted)
     _savedPaneContents: null as Record<string, string> | null,
+    // Tab notifications (breathing red dot for completed Claude tasks)
+    tabNotifications: [] as string[],
   }),
 
   getters: {
@@ -713,6 +715,40 @@ export const useTerminalStore = defineStore("terminal", {
 
     setDisplayMode(mode: 'tabs' | 'conversation') {
       this.displayMode = mode;
+    },
+
+    // ============================================================================
+    // Tab Notifications (Claude completion red dot)
+    // ============================================================================
+
+    /** Walk all tab layouts to find which tab contains a given sessionId */
+    findTabBySessionId(sessionId: string): string | null {
+      const walk = (node: SplitNode): boolean => {
+        if (node.type === 'pane' && node.sessionId === sessionId) return true
+        if (node.children) {
+          for (const child of node.children) {
+            if (walk(child)) return true
+          }
+        }
+        return false
+      }
+      for (const tab of this.tabs) {
+        if (walk(tab.layout)) return tab.id
+      }
+      return null
+    },
+
+    addTabNotification(tabId: string) {
+      if (!this.tabNotifications.includes(tabId)) {
+        this.tabNotifications.push(tabId)
+      }
+    },
+
+    clearTabNotification(tabId: string) {
+      const idx = this.tabNotifications.indexOf(tabId)
+      if (idx !== -1) {
+        this.tabNotifications.splice(idx, 1)
+      }
     },
 
     // ============================================================================

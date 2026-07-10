@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { ref, inject, computed, onMounted, onUnmounted, type Ref } from 'vue'
+import { ref, inject, computed, watch, onMounted, onUnmounted, type Ref } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
+import { useClaudeStatus } from '@/composables/use-claude-status'
+import { useNotification } from '@/composables/use-notification'
 import { usePlatform } from '@/composables/use-platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useI18n } from 'vue-i18n'
 
 const store = useTerminalStore()
 const { t } = useI18n()
+const claudeStatus = useClaudeStatus()
+const { notifyTaskComplete } = useNotification()
 
 // Inject speech recognition
 const speechRecognition = inject<{
@@ -19,6 +23,54 @@ const { isMacOS, isWindows, isLinux } = usePlatform()
 const isLightTheme = computed(() => {
   return store.currentThemeName.includes('Light')
 })
+
+// Play a short pleasant notification tone via Web Audio API
+function playNotificationSound() {
+  try {
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, ctx.currentTime)       // A5
+    osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.1) // D6
+    gain.gain.setValueAtTime(0.3, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
+
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.3)
+    osc.onended = () => ctx.close()
+  } catch {
+    // Audio not available — silently ignore
+  }
+}
+
+// Watch for Claude task completion (isRunning: true → false)
+watch(
+  () => claudeStatus.isRunning.value,
+  (running, wasRunning) => {
+    if (wasRunning && !running) {
+      const sid = claudeStatus.sessionId.value
+      if (!sid) return
+      const tabId = store.findTabBySessionId(sid)
+      if (!tabId) return
+
+      // Don't show red dot on the currently active tab
+      if (tabId !== store.activeTabId) {
+        store.addTabNotification(tabId)
+      }
+      playNotificationSound()
+
+      // Send macOS system notification when app is in background
+      if (store.enableCommandNotifications && !document.hasFocus()) {
+        const tab = store.tabs.find(t => t.id === tabId)
+        notifyTaskComplete('Claude Code 任务完成', `${tab?.title || 'Terminal'} 中的任务已完成`)
+      }
+    }
+  },
+)
 
 const handleMinimize = async () => {
   try {
@@ -60,6 +112,7 @@ const editingTabId = ref<string | null>(null)
 const editingTitle = ref('')
 
 const handleTabClick = (tabId: string) => {
+  store.clearTabNotification(tabId)
   store.setActiveTab(tabId)
 }
 
@@ -168,6 +221,11 @@ const handleKeydown = (e: KeyboardEvent) => {
         >
           ✕
         </button>
+
+        <span
+          v-if="store.tabNotifications.includes(tab.id)"
+          class="notification-dot"
+        ></span>
       </div>
     </div>
 
@@ -779,5 +837,33 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 .layout-menu-item svg {
   flex-shrink: 0;
+}
+
+/* Notification dot (breathing red dot) */
+.notification-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  background: #ff4444;
+  border-radius: 50%;
+  animation: breathe 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.light-theme .notification-dot {
+  background: #e53935;
+}
+
+@keyframes breathe {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
 }
 </style>
