@@ -18,4 +18,8 @@ export default defineConfig({
   // to make use of `TAURI_DEBUG` and other env variables
   // https://tauri.app/v2/reference/environment-variables/
   envPrefix: ['VITE_', 'TAURI_'],
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+  },
 })
