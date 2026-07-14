@@ -1,4 +1,5 @@
 mod clipboard;
+mod git;
 mod pty;
 mod settings;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -6,9 +7,36 @@ mod speech;
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tauri::{Manager, Emitter}; // Import Manager and Emitter traits
-use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::{AppHandle, Manager, Emitter}; // Import Manager and Emitter traits
+use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItemKind};
 use pty::manager::PtyManager;
+
+#[tauri::command]
+fn set_update_menu_badge(app: AppHandle, has_update: bool) {
+    if let Some(menu) = app.menu() {
+        if let Ok(items) = menu.items() {
+            for item in items {
+                if let MenuItemKind::Submenu(submenu) = item {
+                    if let Ok(sub_items) = submenu.items() {
+                        for sub_item in sub_items {
+                            if let MenuItemKind::MenuItem(menu_item) = sub_item {
+                                if menu_item.id().0 == "check_updates" {
+                                    let text = if has_update {
+                                        "Check for Updates... ●"
+                                    } else {
+                                        "Check for Updates..."
+                                    };
+                                    let _ = menu_item.set_text(text);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,7 +46,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_process::init());
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init());
 
     // macOS-specific plugins
     #[cfg(target_os = "macos")]
@@ -174,6 +203,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            set_update_menu_badge,
             pty::commands::pty_spawn,
             pty::commands::pty_write,
             pty::commands::pty_resize,
@@ -192,6 +222,19 @@ pub fn run() {
             // settings commands
             pty::commands::settings_get,
             pty::commands::settings_update,
+            // git commands
+            git::git_validate_repo,
+            git::git_init_repo,
+            git::git_create_worktree,
+            git::git_remove_worktree,
+            git::git_delete_branch,
+            git::git_status,
+            git::git_log,
+            git::git_stash_list,
+            git::git_stash_save,
+            git::git_stash_pop,
+            git::git_stash_apply,
+            git::git_stash_drop,
             // clipboard commands
             clipboard::save_clipboard_image,
             // speech commands (macOS and Linux only)

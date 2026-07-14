@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch, provide } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch, provide } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useKeyboardShortcuts } from '@/composables/use-keyboard-shortcuts'
 import { useUpdater } from '@/composables/use-updater'
@@ -16,15 +16,20 @@ import UpdateDialog from '@/components/updater/update-dialog.vue'
 import SpeechIndicator from '@/components/speech/speech-indicator.vue'
 import SessionManager from '@/components/terminal/session-manager.vue'
 import ClaudeStatusBar from '@/components/claude/claude-status-bar.vue'
-import ConversationSidebar from '@/components/layout/conversation-sidebar.vue'
+import StudioSidebar from '@/components/layout/studio-sidebar.vue'
 import WhatsNewModal from '@/components/settings/whats-new-modal.vue'
+import { usePlatform } from '@/composables/use-platform'
 import { getVersion } from '@tauri-apps/api/app'
+import { open as openDialog, ask } from '@tauri-apps/plugin-dialog'
 
 const terminalStore = useTerminalStore()
 const { updateInfo, isChecking, checkForUpdates } = useUpdater()
 const showUpdateDialog = ref(false)
 const showWhatsNew = ref(false)
 const { t } = useI18n()
+
+const { isMacOS, isWindows, isLinux } = usePlatform()
+const isLightTheme = computed(() => terminalStore.currentThemeName.includes('Light'))
 
 // Notification system
 const { notifyTaskComplete, notifySuccess, notifyInfo } = useNotification()
@@ -118,6 +123,109 @@ const handleSpeechShortcut = (e: KeyboardEvent) => {
   }
 }
 
+const handleDismissVersion = () => {
+  if (updateInfo.value) {
+    localStorage.setItem('materm_dismissed_update_version', updateInfo.value.version)
+    console.log('[App] Dismissed update version:', updateInfo.value.version)
+  }
+}
+
+// Studio project bar: window controls & project management
+const handleStudioMinimize = async () => {
+  try {
+    // @ts-ignore
+    if (window.__TAURI_INTERNALS__) await getCurrentWindow().minimize()
+  } catch (error) { console.error('Failed to minimize:', error) }
+}
+const handleStudioMaximize = async () => {
+  try {
+    // @ts-ignore
+    if (window.__TAURI_INTERNALS__) await getCurrentWindow().toggleMaximize()
+  } catch (error) { console.error('Failed to maximize:', error) }
+}
+const handleStudioClose = async () => {
+  try {
+    // @ts-ignore
+    if (window.__TAURI_INTERNALS__) await getCurrentWindow().close()
+  } catch (error) { console.error('Failed to close:', error) }
+}
+
+const handleAddProject = async () => {
+  try {
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      title: t('studio.selectProject'),
+    })
+    if (!selected) return
+
+    try {
+      await terminalStore.addStudioProject(selected as string)
+    } catch (error: any) {
+      const shouldInit = await ask(t('studio.initGitConfirm'), {
+        title: t('studio.notGitRepo'),
+        kind: 'warning',
+        okLabel: t('common.confirm'),
+        cancelLabel: t('common.cancel'),
+      })
+      if (shouldInit) {
+        await invoke('git_init_repo', { path: selected })
+        await terminalStore.addStudioProject(selected as string)
+      }
+    }
+  } catch (error) {
+    console.error('[App] Failed to add studio project:', error)
+  }
+}
+
+const handleCloseProject = async (tabId: string) => {
+  await terminalStore.closeStudioTab(tabId)
+}
+
+// Watch for studio mode activation — prompt folder picker if no project is set
+watch(
+  () => terminalStore.displayMode,
+  async (mode) => {
+    if (mode === 'studio' && !terminalStore.studioProject) {
+      try {
+        const selected = await openDialog({
+          directory: true,
+          multiple: false,
+          title: t('studio.selectProject'),
+        })
+        if (!selected) {
+          terminalStore.displayMode = 'tabs'
+          return
+        }
+
+        try {
+          await terminalStore.enterStudioMode(selected as string)
+        } catch (enterError: any) {
+          // Not a git repo — ask user if we should init
+          const shouldInit = await ask(t('studio.initGitConfirm'), {
+            title: t('studio.notGitRepo'),
+            kind: 'warning',
+            okLabel: t('common.confirm'),
+            cancelLabel: t('common.cancel'),
+          })
+          if (shouldInit) {
+            await invoke('git_init_repo', { path: selected })
+            await terminalStore.enterStudioMode(selected as string)
+          } else {
+            // User declined — re-open folder picker by re-triggering the watch
+            terminalStore.displayMode = 'tabs'
+            await new Promise(r => setTimeout(r, 100))
+            terminalStore.displayMode = 'studio'
+          }
+        }
+      } catch (error: any) {
+        console.error('[App] Studio mode folder selection failed:', error)
+        terminalStore.displayMode = 'tabs'
+      }
+    }
+  },
+)
+
 const onWhatsNewClose = async () => {
   showWhatsNew.value = false
   try {
@@ -190,6 +298,7 @@ onMounted(async () => {
       try {
         const hasUpdate = await checkForUpdates(false)
         if (hasUpdate) {
+          await invoke('set_update_menu_badge', { hasUpdate: true })
           await notifyInfo(t('notifications.updateAvailable'), t('notifications.updateAvailableDesc'))
         }
       } catch (error) {
@@ -230,9 +339,17 @@ onMounted(async () => {
     try {
       const hasUpdate = await checkForUpdates(true) // silent mode
       if (hasUpdate) {
-        console.log('[App] Update available, showing dialog')
-        showUpdateDialog.value = true
-        await notifyInfo(t('notifications.updateAvailable'), t('notifications.updateAvailableStartup'))
+        // Mark menu badge regardless of whether we show the dialog
+        await invoke('set_update_menu_badge', { hasUpdate: true })
+
+        const dismissedVersion = localStorage.getItem('materm_dismissed_update_version')
+        if (dismissedVersion && updateInfo.value && updateInfo.value.version === dismissedVersion) {
+          console.log('[App] Update available but version is dismissed, skipping dialog')
+        } else {
+          console.log('[App] Update available, showing dialog')
+          showUpdateDialog.value = true
+          await notifyInfo(t('notifications.updateAvailable'), t('notifications.updateAvailableStartup'))
+        }
       }
     } catch (error) {
       console.error('[App] Auto update check failed:', error)
@@ -303,22 +420,100 @@ onUnmounted(() => {
       </div>
     </template>
 
-    <!-- Conversation mode: horizontal layout with sidebar -->
+    <!-- Studio mode: project tab bar + horizontal layout with sidebar -->
     <template v-else>
-      <div class="conversation-layout">
-        <conversation-sidebar />
-        <div class="conversation-content">
-          <div
-            v-for="tab in terminalStore.tabs"
-            :key="tab.id"
-            v-show="tab.id === terminalStore.activeTabId"
-            class="terminal-view"
-          >
-            <split-container :node="tab.layout" />
-          </div>
+      <!-- Project tab bar -->
+      <div class="studio-project-bar" :class="{ 'light-theme': isLightTheme }">
+        <div v-if="isMacOS()" class="window-controls macos">
+          <button class="control-btn close" @click="handleStudioClose"></button>
+          <button class="control-btn minimize" @click="handleStudioMinimize"></button>
+          <button class="control-btn maximize" @click="handleStudioMaximize"></button>
+        </div>
 
-          <div v-if="terminalStore.tabs.length === 0" class="empty-state">
-            {{ $t('terminal.noSessions') }}
+        <div class="studio-tab-list">
+          <div
+            v-for="tab in terminalStore.studioTabs"
+            :key="tab.id"
+            class="studio-tab"
+            :class="{ active: tab.id === terminalStore.activeStudioTabId }"
+            @click="terminalStore.switchStudioTab(tab.id)"
+          >
+            <svg class="studio-tab-icon" width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <circle cx="5" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/>
+              <circle cx="5" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/>
+              <circle cx="12" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M5 6V10M7 4H10C11.1 4 12 4.9 12 6" stroke="currentColor" stroke-width="1.2"/>
+            </svg>
+            <span class="studio-tab-name">{{ tab.project.name }}</span>
+            <button
+              v-if="terminalStore.studioTabs.length > 1"
+              class="studio-tab-close"
+              @click.stop="handleCloseProject(tab.id)"
+            >&times;</button>
+          </div>
+        </div>
+
+        <button class="add-project-btn" @click="handleAddProject" :title="$t('studio.addProject')">+</button>
+
+        <div class="drag-spacer" data-tauri-drag-region></div>
+
+        <button class="studio-bar-btn" @click="terminalStore.exitStudioMode()" :title="$t('studio.switchToTabs')">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="1" y="1" width="12" height="3" rx="0.5" stroke="currentColor" stroke-width="1"/>
+            <rect x="1" y="5" width="12" height="8" rx="0.5" stroke="currentColor" stroke-width="1"/>
+          </svg>
+        </button>
+
+        <button class="studio-bar-btn" @click="terminalStore.toggleSettings" title="Settings">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M7 1V3M7 11V13M1 7H3M11 7H13M2.76 2.76L4.17 4.17M9.83 9.83L11.24 11.24M11.24 2.76L9.83 4.17M4.17 9.83L2.76 11.24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </button>
+
+        <div v-if="isWindows() || isLinux()" class="window-controls windows-linux">
+          <button class="control-btn-win minimize" @click="handleStudioMinimize" title="Minimize">
+            <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0" y="4" width="10" height="1" fill="currentColor"/></svg>
+          </button>
+          <button class="control-btn-win maximize" @click="handleStudioMaximize" title="Maximize">
+            <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+          </button>
+          <button class="control-btn-win close" @click="handleStudioClose" title="Close">
+            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0,0 L10,10 M10,0 L0,10" stroke="currentColor" stroke-width="1"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="studio-layout">
+        <studio-sidebar />
+        <div class="studio-content">
+          <template v-for="branch in terminalStore.studioBranches" :key="branch.id">
+            <div
+              v-show="branch.id === terminalStore.activeStudioBranchId"
+              class="terminal-view"
+            >
+              <split-container
+                v-if="branch.sessionId"
+                :node="{
+                  type: 'pane',
+                  paneId: branch.paneId,
+                  sessionId: branch.sessionId,
+                  cwd: branch.worktreePath,
+                }"
+              />
+            </div>
+          </template>
+
+          <div v-if="terminalStore.studioBranches.length === 0" class="empty-state studio-empty">
+            <div class="studio-welcome">
+              <svg width="48" height="48" viewBox="0 0 16 16" fill="none" style="opacity: 0.3; margin-bottom: 12px;">
+                <circle cx="5" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/>
+                <circle cx="5" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/>
+                <circle cx="12" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M5 6V10M7 4H10C11.1 4 12 4.9 12 6" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+              <p>{{ $t('studio.newBranch') }}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -342,6 +537,7 @@ onUnmounted(() => {
       :update-info="updateInfo"
       :is-checking="isChecking"
       @close="showUpdateDialog = false"
+      @dismiss-version="handleDismissVersion"
     />
 
     <!-- Claude Status Bar -->
@@ -384,18 +580,303 @@ onUnmounted(() => {
   color: #666;
 }
 
-.conversation-layout {
+.studio-layout {
   display: flex;
   flex-direction: row;
   flex: 1;
   overflow: hidden;
 }
 
-.conversation-content {
+.studio-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 0 10px 0 0;
+}
+
+.studio-empty {
+  flex-direction: column;
+}
+
+.studio-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #666;
+  font-size: 14px;
+}
+
+/* Studio project tab bar */
+.studio-project-bar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #333;
+  padding: 0 12px 0 8px;
+  user-select: none;
+  gap: 8px;
+  border-radius: 10px 10px 0 0;
+  flex-shrink: 0;
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.studio-project-bar.light-theme {
+  background: #f3f3f3;
+  border-bottom-color: #d4d4d4;
+}
+
+.studio-project-bar .window-controls.macos {
+  display: flex;
+  gap: 8px;
+  padding: 0 4px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.studio-project-bar .control-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.studio-project-bar .control-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.studio-project-bar:hover .control-btn::before {
+  opacity: 1;
+}
+
+.studio-project-bar .control-btn.close { background: #ff5f56; }
+.studio-project-bar .control-btn.close::before { content: '\00d7'; font-size: 10px; color: #4d0000; font-weight: bold; }
+.studio-project-bar .control-btn.minimize { background: #ffbd2e; }
+.studio-project-bar .control-btn.minimize::before { content: '\2212'; font-size: 10px; color: #995700; font-weight: bold; }
+.studio-project-bar .control-btn.maximize { background: #27c93f; }
+.studio-project-bar .control-btn.maximize::before { content: '+'; font-size: 10px; color: #006400; font-weight: bold; }
+
+.studio-project-bar .window-controls.windows-linux {
+  display: flex;
+  gap: 0;
+}
+
+.studio-project-bar .control-btn-win {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 40px;
+  background: transparent;
+  border: none;
+  color: #cccccc;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.studio-project-bar .control-btn-win:hover {
+  background: #3e3e42;
+}
+
+.studio-project-bar .control-btn-win.close:hover {
+  background: #e81123;
+  color: white;
+}
+
+.studio-tab-list {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 1;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.studio-tab-list::-webkit-scrollbar {
+  height: 0;
+}
+
+.studio-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #2d2d30;
+  border: 1px solid transparent;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-width: 80px;
+  max-width: 180px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.studio-project-bar.light-theme .studio-tab {
+  background: #e8e8e8;
+}
+
+.studio-tab:hover {
+  background: #37373d;
+}
+
+.studio-project-bar.light-theme .studio-tab:hover {
+  background: #d8d8d8;
+}
+
+.studio-tab.active {
+  background: #1e1e1e;
+  border-color: #007acc;
+  border-bottom-color: #1e1e1e;
+}
+
+.studio-project-bar.light-theme .studio-tab.active {
+  background: #f3f3f3;
+  border-color: #007acc;
+  border-bottom-color: #f3f3f3;
+}
+
+.studio-tab-icon {
+  color: #888;
+  flex-shrink: 0;
+}
+
+.studio-tab.active .studio-tab-icon {
+  color: #007acc;
+}
+
+.studio-tab-name {
+  font-size: 13px;
+  color: #cccccc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-project-bar.light-theme .studio-tab-name {
+  color: #616161;
+}
+
+.studio-tab.active .studio-tab-name {
+  color: #ffffff;
+}
+
+.studio-project-bar.light-theme .studio-tab.active .studio-tab-name {
+  color: #000000;
+}
+
+.studio-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: #858585;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  transition: all 0.15s;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.studio-tab:hover .studio-tab-close {
+  opacity: 1;
+}
+
+.studio-tab-close:hover {
+  background: #e81123;
+  color: white;
+}
+
+.add-project-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #2d2d30;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.studio-project-bar.light-theme .add-project-btn {
+  background: #e8e8e8;
+  color: #616161;
+}
+
+.add-project-btn:hover {
+  background: #37373d;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+.studio-project-bar.light-theme .add-project-btn:hover {
+  background: #d8d8d8;
+  border-color: #007acc;
+  color: #000000;
+}
+
+.studio-project-bar .drag-spacer {
+  flex: 1;
+  min-width: 40px;
+  height: 40px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.studio-bar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #2d2d30;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.studio-project-bar.light-theme .studio-bar-btn {
+  background: #e8e8e8;
+  color: #616161;
+}
+
+.studio-bar-btn:hover {
+  background: #37373d;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+.studio-project-bar.light-theme .studio-bar-btn:hover {
+  background: #d8d8d8;
+  border-color: #007acc;
+  color: #000000;
 }
 </style>

@@ -50,6 +50,52 @@ export interface AppSettings {
   sessionMapping: Record<string, string>
 }
 
+export interface StudioProject {
+  path: string              // repository root directory
+  name: string              // repository name (directory name)
+  defaultBranch: string     // detected default branch
+}
+
+export interface StudioBranch {
+  id: string                // unique ID
+  name: string              // branch name (e.g. feat/login)
+  worktreePath: string      // worktree directory path
+  sessionId: string | null  // PTY session ID (lazy-created)
+  paneId: string            // pane ID
+  createdAt: number
+}
+
+export interface GitFileStatus {
+  path: string
+  status: string   // "modified" | "new" | "deleted" | "renamed" | "typechange"
+  staged: boolean
+}
+
+export interface GitCommitInfo {
+  hash: string
+  short_hash: string
+  message: string
+  author: string
+  timestamp: number
+  parent_count: number
+}
+
+export interface GitStashEntry {
+  index: number
+  message: string
+  timestamp: number
+}
+
+export interface StudioTab {
+  id: string
+  project: StudioProject
+  branches: StudioBranch[]
+  activeBranchId: string | null
+  gitStatus: GitFileStatus[]
+  gitLog: GitCommitInfo[]
+  gitStashes: GitStashEntry[]
+}
+
 function shortenPath(cwd: string): string {
   return cwd
     .replace(/^\/Users\/[^/]+/, '~')
@@ -76,14 +122,22 @@ export const useTerminalStore = defineStore("terminal", {
     sessionMapping: {} as Record<string, string>, // paneId -> tmux session name
     autoRestoreSessions: false,
     isSessionManagerOpen: false,
-    displayMode: 'tabs' as 'tabs' | 'conversation', // 布局模式
+    displayMode: 'tabs' as 'tabs' | 'studio', // 布局模式
+    // Studio mode state (multi-project tabs)
+    studioTabs: [] as StudioTab[],
+    activeStudioTabId: null as string | null,
     // Speech recognition settings
     speechProvider: 'whisper' as 'whisper' | 'alibaba',
     alibabaApiKey: '' as string,
+    // TTS (voice announcements) settings
+    enableVoiceAnnouncements: false,
+    ttsVoice: 'longxiaochun' as string,
     // Transient: saved pane contents during restore (not persisted)
     _savedPaneContents: null as Record<string, string> | null,
     // Tab notifications (breathing red dot for completed Claude tasks)
     tabNotifications: [] as string[],
+    // Git panel loading flag (studio mode)
+    studioGitLoading: false,
   }),
 
   getters: {
@@ -94,6 +148,30 @@ export const useTerminalStore = defineStore("terminal", {
       return Object.keys(themes);
     },
     activeTab: (state) => state.tabs.find((t) => t.id === state.activeTabId),
+    activeStudioTab: (state) => state.studioTabs.find((t) => t.id === state.activeStudioTabId),
+    studioProject(): StudioProject | null {
+      return this.activeStudioTab?.project ?? null
+    },
+    studioBranches(): StudioBranch[] {
+      return this.activeStudioTab?.branches ?? []
+    },
+    activeStudioBranchId(): string | null {
+      return this.activeStudioTab?.activeBranchId ?? null
+    },
+    activeStudioBranch(): StudioBranch | undefined {
+      const tab = this.activeStudioTab
+      if (!tab) return undefined
+      return tab.branches.find((b: StudioBranch) => b.id === tab.activeBranchId)
+    },
+    studioGitStatus(): GitFileStatus[] {
+      return this.activeStudioTab?.gitStatus ?? []
+    },
+    studioGitLog(): GitCommitInfo[] {
+      return this.activeStudioTab?.gitLog ?? []
+    },
+    studioGitStashes(): GitStashEntry[] {
+      return this.activeStudioTab?.gitStashes ?? []
+    },
   },
 
   actions: {
@@ -710,11 +788,331 @@ export const useTerminalStore = defineStore("terminal", {
     },
 
     toggleDisplayMode() {
-      this.displayMode = this.displayMode === 'tabs' ? 'conversation' : 'tabs';
+      if (this.displayMode === 'studio') {
+        this.exitStudioMode()
+      } else {
+        this.displayMode = 'studio'
+      }
     },
 
-    setDisplayMode(mode: 'tabs' | 'conversation') {
+    setDisplayMode(mode: 'tabs' | 'studio') {
       this.displayMode = mode;
+    },
+
+    // ============================================================================
+    // Studio Mode Actions
+    // ============================================================================
+
+    async addStudioProject(projectPath: string) {
+      // @ts-ignore
+      if (!window.__TAURI_INTERNALS__) return
+
+      const info = await invoke<{ default_branch: string; repo_name: string }>(
+        'git_validate_repo',
+        { path: projectPath },
+      )
+
+      const tabId = `studio_project_${Date.now()}`
+      const newTab: StudioTab = {
+        id: tabId,
+        project: {
+          path: projectPath,
+          name: info.repo_name,
+          defaultBranch: info.default_branch,
+        },
+        branches: [],
+        activeBranchId: null,
+        gitStatus: [],
+        gitLog: [],
+        gitStashes: [],
+      }
+
+      this.studioTabs.push(newTab)
+      this.activeStudioTabId = tabId
+      console.log(`[Studio] Added project ${info.repo_name}`)
+    },
+
+    async enterStudioMode(projectPath: string) {
+      try {
+        await this.addStudioProject(projectPath)
+        this.displayMode = 'studio'
+      } catch (error) {
+        console.error('[Studio] Failed to enter studio mode:', error)
+        throw error
+      }
+    },
+
+    async exitStudioMode() {
+      // Close all branch sessions across all project tabs
+      for (const tab of this.studioTabs) {
+        for (const branch of tab.branches) {
+          if (branch.sessionId) {
+            try {
+              // @ts-ignore
+              if (window.__TAURI_INTERNALS__) {
+                await invoke('pty_close', { sessionId: branch.sessionId })
+              }
+            } catch (error) {
+              console.error(`[Studio] Failed to close session for branch ${branch.name}:`, error)
+            }
+          }
+        }
+      }
+
+      this.studioTabs = []
+      this.activeStudioTabId = null
+      this.studioGitLoading = false
+      this.displayMode = 'tabs'
+
+      console.log('[Studio] Exited studio mode')
+    },
+
+    async closeStudioTab(tabId: string) {
+      const tab = this.studioTabs.find(t => t.id === tabId)
+      if (!tab) return
+
+      // Close all branch sessions for this tab
+      for (const branch of tab.branches) {
+        if (branch.sessionId) {
+          try {
+            // @ts-ignore
+            if (window.__TAURI_INTERNALS__) {
+              await invoke('pty_close', { sessionId: branch.sessionId })
+            }
+          } catch (error) {
+            console.error(`[Studio] Failed to close session:`, error)
+          }
+        }
+      }
+
+      this.studioTabs = this.studioTabs.filter(t => t.id !== tabId)
+
+      // If no tabs left, exit studio mode
+      if (this.studioTabs.length === 0) {
+        this.activeStudioTabId = null
+        this.displayMode = 'tabs'
+        return
+      }
+
+      // Switch to another tab if the active one was closed
+      if (this.activeStudioTabId === tabId) {
+        this.activeStudioTabId = this.studioTabs[0].id
+        this.refreshAllGitInfo()
+      }
+    },
+
+    switchStudioTab(tabId: string) {
+      this.activeStudioTabId = tabId
+      this.refreshAllGitInfo()
+    },
+
+    async createStudioBranch(branchName: string) {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+
+      const project = tab.project
+      const sanitizedName = branchName.replace(/\//g, '-')
+      const worktreePath = `${project.path}/.materm-worktrees/${sanitizedName}`
+      const branchId = `studio_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      const paneId = `pane_studio_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return
+
+        await invoke('git_create_worktree', {
+          repoPath: project.path,
+          branchName,
+          baseBranch: project.defaultBranch,
+          worktreePath,
+        })
+
+        const response = await invoke<{ session_id: string; cwd: string }>(
+          'pty_spawn',
+          { cols: 80, rows: 24, cwd: worktreePath },
+        )
+
+        const branch: StudioBranch = {
+          id: branchId,
+          name: branchName,
+          worktreePath,
+          sessionId: response.session_id,
+          paneId,
+          createdAt: Date.now(),
+        }
+
+        tab.branches.push(branch)
+        tab.activeBranchId = branchId
+        this.refreshAllGitInfo()
+
+        console.log(`[Studio] Created branch ${branchName} with worktree at ${worktreePath}`)
+      } catch (error) {
+        console.error(`[Studio] Failed to create branch ${branchName}:`, error)
+        throw error
+      }
+    },
+
+    async removeStudioBranch(branchId: string) {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+
+      const branch = tab.branches.find(b => b.id === branchId)
+      if (!branch) return
+
+      try {
+        // @ts-ignore
+        if (window.__TAURI_INTERNALS__) {
+          if (branch.sessionId) {
+            await invoke('pty_close', { sessionId: branch.sessionId })
+          }
+          await invoke('git_remove_worktree', {
+            repoPath: tab.project.path,
+            worktreePath: branch.worktreePath,
+            deleteBranch: false,
+          })
+          await invoke('git_delete_branch', {
+            repoPath: tab.project.path,
+            branchName: branch.name,
+          })
+        }
+      } catch (error) {
+        console.error(`[Studio] Failed to remove branch ${branch.name}:`, error)
+      }
+
+      tab.branches = tab.branches.filter(b => b.id !== branchId)
+      if (tab.activeBranchId === branchId) {
+        tab.activeBranchId = tab.branches[0]?.id || null
+      }
+
+      console.log(`[Studio] Removed branch ${branch.name}`)
+    },
+
+    setActiveStudioBranch(branchId: string) {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (tab) {
+        tab.activeBranchId = branchId
+      }
+      this.refreshAllGitInfo()
+    },
+
+    // ============================================================================
+    // Git Panel Actions (Studio Mode)
+    // ============================================================================
+
+    async refreshGitStatus() {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+      const branch = tab.branches.find(b => b.id === tab.activeBranchId)
+      if (!branch) return
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return
+        tab.gitStatus = await invoke<GitFileStatus[]>('git_status', { path: branch.worktreePath })
+      } catch (error) {
+        console.error('[Studio] Failed to refresh git status:', error)
+        tab.gitStatus = []
+      }
+    },
+
+    async refreshGitLog() {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+      const branch = tab.branches.find(b => b.id === tab.activeBranchId)
+      if (!branch) return
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return
+        tab.gitLog = await invoke<GitCommitInfo[]>('git_log', { path: branch.worktreePath, limit: 50 })
+      } catch (error) {
+        console.error('[Studio] Failed to refresh git log:', error)
+        tab.gitLog = []
+      }
+    },
+
+    async refreshGitStashes() {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return
+        tab.gitStashes = await invoke<GitStashEntry[]>('git_stash_list', { repoPath: tab.project.path })
+      } catch (error) {
+        console.error('[Studio] Failed to refresh git stashes:', error)
+        tab.gitStashes = []
+      }
+    },
+
+    async refreshAllGitInfo() {
+      this.studioGitLoading = true
+      try {
+        await Promise.all([
+          this.refreshGitStatus(),
+          this.refreshGitLog(),
+          this.refreshGitStashes(),
+        ])
+      } finally {
+        this.studioGitLoading = false
+      }
+    },
+
+    async saveStash(message?: string, includeUntracked?: boolean) {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return
+        await invoke('git_stash_save', {
+          repoPath: tab.project.path,
+          message: message || null,
+          includeUntracked: includeUntracked || false,
+        })
+        await this.refreshAllGitInfo()
+      } catch (error) {
+        console.error('[Studio] Failed to save stash:', error)
+        throw error
+      }
+    },
+
+    async popStash(index: number) {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return
+        await invoke('git_stash_pop', { repoPath: tab.project.path, index })
+        await this.refreshAllGitInfo()
+      } catch (error) {
+        console.error('[Studio] Failed to pop stash:', error)
+        throw error
+      }
+    },
+
+    async applyStash(index: number) {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return
+        await invoke('git_stash_apply', { repoPath: tab.project.path, index })
+        await this.refreshAllGitInfo()
+      } catch (error) {
+        console.error('[Studio] Failed to apply stash:', error)
+        throw error
+      }
+    },
+
+    async dropStash(index: number) {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return
+        await invoke('git_stash_drop', { repoPath: tab.project.path, index })
+        await this.refreshGitStashes()
+      } catch (error) {
+        console.error('[Studio] Failed to drop stash:', error)
+        throw error
+      }
     },
 
     // ============================================================================
@@ -754,6 +1152,14 @@ export const useTerminalStore = defineStore("terminal", {
     // ============================================================================
     // Speech Recognition Settings
     // ============================================================================
+
+    toggleVoiceAnnouncements() {
+      this.enableVoiceAnnouncements = !this.enableVoiceAnnouncements;
+    },
+
+    setTtsVoice(voice: string) {
+      this.ttsVoice = voice;
+    },
 
     setSpeechProvider(provider: 'whisper' | 'alibaba') {
       this.speechProvider = provider;
