@@ -96,6 +96,8 @@ const closeSearch = () => {
 let inputBuffer = ''
 // Track if we've received any data
 let hasReceivedData = false
+// Save normal buffer viewport position across alternate screen buffer switches (TUI apps)
+let savedNormalViewportY: number | null = null
 // Function to parse OSC 7 (current directory) from terminal output
 const parseOSC7 = (data: Uint8Array): string | null => {
   const text = new TextDecoder().decode(data)
@@ -129,6 +131,16 @@ const debouncedResize = (cols: number, rows: number) => {
 // Fit terminal while preserving scroll position
 const safeFit = () => {
   if (!terminal || !managed?.fitAddon) return
+
+  const isAlternateBuffer = terminal.buffer.active === terminal.buffer.alternate
+
+  // When alternate buffer is active (TUI apps), fitAddon.fit() can corrupt the
+  // normal buffer's viewport position as a side effect. Skip scroll restoration
+  // for alternate buffer since it has no scrollback (viewportY is always 0).
+  if (isAlternateBuffer) {
+    managed.fitAddon.fit()
+    return
+  }
 
   const buffer = terminal.buffer.active
   const wasAtBottom = buffer.viewportY >= buffer.baseY
@@ -276,6 +288,30 @@ onMounted(async () => {
 
   xtermManager.addDisposable(paneId, terminal.onWriteParsed(() => {
     checkScrollPosition()
+  }))
+
+  // Save/restore normal buffer scroll position across alternate screen switches.
+  // TUI apps (vim, htop, Claude Code) switch to the alternate buffer. During that
+  // time, fitAddon.fit() or other operations can corrupt the normal buffer's
+  // viewport position. We save it on enter and restore it on exit.
+  xtermManager.addDisposable(paneId, terminal.buffer.onBufferChange((buf) => {
+    if (buf === terminal!.buffer.alternate) {
+      // Entering alternate buffer — save normal buffer viewport position
+      savedNormalViewportY = terminal!.buffer.normal.viewportY
+    } else {
+      // Returning to normal buffer — restore saved position
+      if (savedNormalViewportY !== null) {
+        const targetY = savedNormalViewportY
+        savedNormalViewportY = null
+        requestAnimationFrame(() => {
+          if (!terminal) return
+          const currentY = terminal.buffer.normal.viewportY
+          if (currentY !== targetY) {
+            terminal.scrollLines(targetY - currentY)
+          }
+        })
+      }
+    }
   }))
 
   // Wait for terminal renderer to be fully initialized before fitting
@@ -512,7 +548,9 @@ onUnmounted(() => {
 }
 
 :deep(.xterm-viewport) {
-  overflow-y: auto !important;
+  /* Let xterm.js manage overflow-y internally.
+     Overriding with 'auto' can desync scrollTop during alternate buffer
+     mode (TUI apps), causing the viewport to jump. */
 }
 
 :deep(.xterm-screen) {

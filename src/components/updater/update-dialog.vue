@@ -8,7 +8,7 @@ const props = defineProps<{
   isChecking: boolean
 }>()
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'dismiss-version'])
 
 const { t } = useI18n()
 const { isDownloading, isReadyToRestart, downloadProgress, downloadAndInstall, restartApp, error } = useUpdater()
@@ -91,11 +91,19 @@ const handleRestart = async () => {
 
       <div class="update-actions">
         <button
-          @click="emit('close')"
+          v-if="updateInfo"
+          @click="emit('dismiss-version'); emit('close')"
           :disabled="isDownloading"
           class="btn-secondary"
         >
-          {{ updateInfo ? $t('updater.remindLater') : $t('common.close') }}
+          {{ $t('updater.dismissVersion') }}
+        </button>
+        <button
+          v-else
+          @click="emit('close')"
+          class="btn-secondary"
+        >
+          {{ $t('common.close') }}
         </button>
         <button
           v-if="updateInfo && isReadyToRestart"

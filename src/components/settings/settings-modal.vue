@@ -408,6 +408,55 @@ const themeColors = computed(() => {
               </div>
             </div>
           </div>
+
+          <!-- TTS Voice Announcements -->
+          <div class="setting-item">
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.tts.title') }}</label>
+
+            <div class="checkbox-wrapper">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  :checked="store.enableVoiceAnnouncements"
+                  @change="store.toggleVoiceAnnouncements()"
+                  class="checkbox-input"
+                />
+                <span class="checkbox-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.tts.enable') }}</span>
+              </label>
+            </div>
+            <p class="setting-description" :style="{ color: themeColors.descColor, paddingLeft: 0, marginBottom: '12px' }">
+              {{ $t('settings.tts.enableDesc') }}
+            </p>
+
+            <div v-if="store.enableVoiceAnnouncements">
+              <div v-if="!store.alibabaApiKey" style="margin-bottom: 12px;">
+                <p class="setting-description" :style="{ color: '#fa8c16', paddingLeft: 0 }">
+                  {{ $t('settings.tts.noApiKey') }}
+                </p>
+              </div>
+
+              <div class="setting-row">
+                <label class="setting-sublabel" :style="{ color: themeColors.labelColor }">{{ $t('settings.tts.voice') }}</label>
+                <select
+                  :value="store.ttsVoice"
+                  @change="store.setTtsVoice(($event.target as HTMLSelectElement).value)"
+                  class="select-input"
+                  :style="{
+                    background: themeColors.inputBg,
+                    borderColor: themeColors.inputBorder,
+                    color: themeColors.inputColor
+                  }"
+                >
+                  <option value="longxiaochun">longxiaochun (女声-温柔)</option>
+                  <option value="longyue">longyue (女声-活力)</option>
+                  <option value="longxiaoxia">longxiaoxia (女声-甜美)</option>
+                  <option value="longanyang">longanyang (男声-沉稳)</option>
+                  <option value="longanhuan">longanhuan (男声-磁性)</option>
+                  <option value="longshu">longshu (男声-儒雅)</option>
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div v-if="activeCategory === 'View'" class="settings-section">
@@ -432,12 +481,12 @@ const themeColors = computed(() => {
                 <input
                   type="radio"
                   name="displayMode"
-                  value="conversation"
-                  :checked="store.displayMode === 'conversation'"
-                  @change="store.setDisplayMode('conversation')"
+                  value="studio"
+                  :checked="store.displayMode === 'studio'"
+                  @change="store.setDisplayMode('studio')"
                   class="radio-input"
                 />
-                <span class="radio-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.displayModeConversation') }}</span>
+                <span class="radio-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.displayModeStudio') }}</span>
               </label>
             </div>
           </div>

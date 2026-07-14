@@ -97,6 +97,24 @@ export class ClaudeOutputParser implements OutputParser<ClaudeMetrics> {
     // Claude Code's output is too varied for reliable pattern matching.
     return false
   }
+
+  /**
+   * Detect if Claude is waiting for user input
+   * Matches Y/n confirmations, interactive prompts, and questions
+   */
+  isWaitingForInput(line: string): boolean {
+    // [Y/n] / (y/N) / [yes/no] confirmation prompts
+    if (/\[(Y\/n|y\/N|yes\/no|Yes\/No)\]/i.test(line)) return true
+    if (/\((Y\/n|y\/N|yes\/no|Yes\/No)\)/i.test(line)) return true
+
+    // Inquirer.js style: "? " or "> " at the start of a line
+    if (/^[?❯>]\s+.+/.test(line)) return true
+
+    // Question sentences (length > 10 and ends with ?)
+    if (line.length > 10 && line.trimEnd().endsWith('?')) return true
+
+    return false
+  }
 }
 
 /**

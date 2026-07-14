@@ -45,6 +45,7 @@ export function useClaudeStatus() {
     metrics,
     sessionId,
     hasMetrics,
+    isWaitingForInput,
     startTask,
     processOutput: processTaskOutput,
     endTask,
@@ -104,6 +105,7 @@ export function useClaudeStatus() {
     startSession,
     processOutput,
     endSession,
+    isWaitingForInput,
 
     // New generic interface
     metrics,

@@ -14,11 +14,21 @@ const i18n = createI18n({ legacy: false, locale: 'en', messages: { en: {} } })
 // Controllable claude status refs
 const mockIsRunning = ref(false)
 const mockSessionId = ref<string | null>(null)
+const mockIsWaitingForInput = ref(false)
 
 vi.mock('@/composables/use-claude-status', () => ({
   useClaudeStatus: () => ({
     isRunning: mockIsRunning,
     sessionId: mockSessionId,
+    isWaitingForInput: mockIsWaitingForInput,
+  }),
+}))
+
+vi.mock('@/composables/use-tts', () => ({
+  useTts: () => ({
+    speak: vi.fn(),
+    stop: vi.fn(),
+    isSpeaking: ref(false),
   }),
 }))
 

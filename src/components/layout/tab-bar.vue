@@ -4,6 +4,7 @@ import { useTerminalStore } from '@/stores/terminal-store'
 import { useClaudeStatus } from '@/composables/use-claude-status'
 import { useNotification } from '@/composables/use-notification'
 import { usePlatform } from '@/composables/use-platform'
+import { useTts } from '@/composables/use-tts'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useI18n } from 'vue-i18n'
 
@@ -11,6 +12,7 @@ const store = useTerminalStore()
 const { t } = useI18n()
 const claudeStatus = useClaudeStatus()
 const { notifyTaskComplete } = useNotification()
+const { speak } = useTts()
 
 // Inject speech recognition
 const speechRecognition = inject<{
@@ -61,13 +63,29 @@ watch(
       if (tabId !== store.activeTabId) {
         store.addTabNotification(tabId)
       }
-      playNotificationSound()
+
+      // Voice announcement replaces notification sound when enabled
+      if (store.enableVoiceAnnouncements) {
+        speak('任务已完成')
+      } else {
+        playNotificationSound()
+      }
 
       // Send macOS system notification when app is in background
       if (store.enableCommandNotifications && !document.hasFocus()) {
         const tab = store.tabs.find(t => t.id === tabId)
         notifyTaskComplete('Claude Code 任务完成', `${tab?.title || 'Terminal'} 中的任务已完成`)
       }
+    }
+  },
+)
+
+// Watch for Claude waiting for input (false → true)
+watch(
+  () => claudeStatus.isWaitingForInput.value,
+  (waiting, wasWaiting) => {
+    if (waiting && !wasWaiting) {
+      speak('Claude 有问题需要确认')
     }
   },
 )
@@ -285,8 +303,8 @@ const handleKeydown = (e: KeyboardEvent) => {
       </svg>
     </button>
 
-    <!-- Toggle to conversation mode -->
-    <button class="layout-btn" @click="store.toggleDisplayMode()" title="Switch to conversation mode">
+    <!-- Toggle to studio mode -->
+    <button class="layout-btn" @click="store.toggleDisplayMode()" :title="t('studio.title')">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <rect x="1" y="1" width="5" height="14" rx="1" stroke="currentColor" stroke-width="1.2"/>
         <rect x="8" y="1" width="7" height="14" rx="1" stroke="currentColor" stroke-width="1.2"/>
@@ -294,7 +312,10 @@ const handleKeydown = (e: KeyboardEvent) => {
     </button>
 
     <button class="settings-btn" @click="store.toggleSettings" title="Settings">
-      ⚙
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M8 1.5V3.5M8 12.5V14.5M1.5 8H3.5M12.5 8H14.5M3.4 3.4L4.8 4.8M11.2 11.2L12.6 12.6M12.6 3.4L11.2 4.8M4.8 11.2L3.4 12.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
     </button>
 
     <!-- Windows/Linux style window controls (right side) -->
@@ -624,15 +645,13 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 .new-tab-btn:hover {
-  background: #37373d;
-  border-color: #007acc;
+  background: #007acc;
   color: #ffffff;
 }
 
 .light-theme .new-tab-btn:hover {
-  background: #d8d8d8;
-  border-color: #007acc;
-  color: #000000;
+  background: #007acc;
+  color: #ffffff;
 }
 
 .new-tab-btn:active {
@@ -662,15 +681,13 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 .speech-btn:hover {
-  background: #37373d;
-  border-color: #007acc;
+  background: #007acc;
   color: #ffffff;
 }
 
 .light-theme .speech-btn:hover {
-  background: #d8d8d8;
-  border-color: #007acc;
-  color: #000000;
+  background: #007acc;
+  color: #ffffff;
 }
 
 .speech-btn:active {
@@ -727,15 +744,13 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 .layout-btn:hover {
-  background: #37373d;
-  border-color: #007acc;
+  background: #007acc;
   color: #ffffff;
 }
 
 .light-theme .layout-btn:hover {
-  background: #d8d8d8;
-  border-color: #007acc;
-  color: #000000;
+  background: #007acc;
+  color: #ffffff;
 }
 
 .layout-btn:active {
@@ -753,7 +768,6 @@ const handleKeydown = (e: KeyboardEvent) => {
   border-radius: 4px;
   color: #cccccc;
   cursor: pointer;
-  font-size: 18px;
   transition: all 0.15s;
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -765,15 +779,13 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 .settings-btn:hover {
-  background: #37373d;
-  border-color: #007acc;
+  background: #007acc;
   color: #ffffff;
 }
 
 .light-theme .settings-btn:hover {
-  background: #d8d8d8;
-  border-color: #007acc;
-  color: #000000;
+  background: #007acc;
+  color: #ffffff;
 }
 
 .settings-btn:active {

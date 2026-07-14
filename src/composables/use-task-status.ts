@@ -38,6 +38,11 @@ export interface OutputParser<T extends TaskMetrics = TaskMetrics> {
   isComplete?(line: string): boolean
 
   /**
+   * Detect if task is waiting for user input
+   */
+  isWaitingForInput?(line: string): boolean
+
+  /**
    * Strip formatting/control characters
    */
   stripFormatting?(text: string): string
@@ -63,9 +68,11 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
   const sessionId = ref<string | null>(null)
   const taskType = ref<string>('')
   const metrics = ref<T>({} as T)
+  const isWaitingForInput = ref(false)
 
   let completionTimer: ReturnType<typeof setTimeout> | null = null
   let inactivityTimer: ReturnType<typeof setTimeout> | null = null
+  let pendingWaitingForInput = false
 
   /**
    * Start tracking a new task
@@ -76,6 +83,8 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
     taskType.value = type
     currentAction.value = ''
     metrics.value = {} as T
+    isWaitingForInput.value = false
+    pendingWaitingForInput = false
 
     if (completionTimer) {
       clearTimeout(completionTimer)
@@ -110,10 +119,20 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
         metrics.value = { ...metrics.value, ...parsedMetrics }
       }
 
-      // Parse action
+      // Parse action — if a new action is detected, reset waiting state
       const action = parser.parseAction(line)
       if (action) {
         currentAction.value = action
+        // New action means Claude is working again, not waiting
+        if (pendingWaitingForInput || isWaitingForInput.value) {
+          pendingWaitingForInput = false
+          isWaitingForInput.value = false
+        }
+      }
+
+      // Check if waiting for input
+      if (parser.isWaitingForInput && parser.isWaitingForInput(line)) {
+        pendingWaitingForInput = true
       }
 
       // Check if complete
@@ -128,6 +147,11 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
     completionTimer = setTimeout(() => {
       if (isRunning.value) {
         currentAction.value = ''
+        // If we have a pending waiting-for-input marker, confirm it after idle period
+        if (pendingWaitingForInput) {
+          isWaitingForInput.value = true
+          pendingWaitingForInput = false
+        }
       }
     }, completionDelay)
 
@@ -148,6 +172,8 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
   const endTask = () => {
     isRunning.value = false
     currentAction.value = ''
+    isWaitingForInput.value = false
+    pendingWaitingForInput = false
 
     if (completionTimer) {
       clearTimeout(completionTimer)
@@ -199,6 +225,7 @@ export function useTaskStatus<T extends TaskMetrics = TaskMetrics>(
     sessionId,
     taskType,
     hasMetrics,
+    isWaitingForInput,
 
     // Actions
     startTask,

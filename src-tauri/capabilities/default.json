@@ -18,6 +18,7 @@
     "core:app:allow-name",
     "core:app:allow-version",
     "core:window:allow-set-title",
-    "notification:default"
+    "notification:default",
+    "dialog:default"
   ]
 }
