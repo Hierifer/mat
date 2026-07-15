@@ -312,21 +312,6 @@ const themeColors = computed(() => {
               </p>
             </div>
 
-            <div v-if="store.tmuxEnabled" class="setting-row" style="margin-top: 15px;">
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  v-model="store.autoRestoreSessions"
-                  @change="store.saveSessionMapping()"
-                  class="checkbox-input"
-                />
-                <span class="checkbox-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.tmux.autoRestore') }}</span>
-              </label>
-              <p class="setting-description" :style="{ color: themeColors.descColor }">
-                {{ $t('settings.tmux.autoRestoreDesc', '重启应用时自动连接到之前的 tmux 会话') }}
-              </p>
-            </div>
-
             <button
               v-if="store.tmuxEnabled"
               @click="store.toggleSessionManager()"

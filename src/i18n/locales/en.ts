@@ -28,9 +28,7 @@ export default {
     tmux: {
       title: 'tmux Integration',
       enable: 'Enable tmux session management',
-      enableDesc: 'Use tmux for session persistence and unlimited scrollback',
-      autoRestore: 'Auto-restore sessions on startup',
-      autoRestoreDesc: 'Automatically reconnect to previous tmux sessions when restarting',
+      enableDesc: 'Use tmux for session persistence and unlimited scrollback; previous terminal layout and sessions are restored automatically on restart',
       manageSession: 'Manage tmux Sessions',
     },
     speech: {

@@ -226,6 +226,21 @@ watch(
   },
 )
 
+// Persist tab/split layout (debounced) so tmux sessions can be reattached
+// into the same layout after restart
+let layoutSnapshotTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  [() => terminalStore.tabs, () => terminalStore.activeTabId, () => terminalStore.activePaneId],
+  () => {
+    if (!terminalStore.tmuxEnabled) return
+    if (layoutSnapshotTimer) clearTimeout(layoutSnapshotTimer)
+    layoutSnapshotTimer = setTimeout(() => {
+      terminalStore.saveLayoutSnapshot()
+    }, 500)
+  },
+  { deep: true },
+)
+
 const onWhatsNewClose = async () => {
   showWhatsNew.value = false
   try {
@@ -255,7 +270,7 @@ onMounted(async () => {
         console.warn('State restore failed, creating fresh tab')
         await terminalStore.createTab()
       }
-    } else if (terminalStore.tmuxEnabled && terminalStore.autoRestoreSessions) {
+    } else if (terminalStore.tmuxEnabled) {
       console.log('Restoring tmux sessions...')
       await terminalStore.restoreSessions()
     } else {
@@ -391,6 +406,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (layoutSnapshotTimer) clearTimeout(layoutSnapshotTimer)
   if (unlistenSettings) unlistenSettings()
   if (unlistenAbout) unlistenAbout()
   if (unlistenCheckUpdates) unlistenCheckUpdates()

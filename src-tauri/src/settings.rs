@@ -8,7 +8,6 @@ use std::path::PathBuf;
 pub struct AppSettings {
     pub tmux_enabled: bool,
     pub tmux_scrollback_limit: u32, // 0 = unlimited
-    pub auto_restore_sessions: bool,
     pub session_mapping: HashMap<String, String>, // paneId -> tmux session name
     // Speech recognition settings
     #[serde(default = "default_speech_provider")]
@@ -26,7 +25,6 @@ impl Default for AppSettings {
         Self {
             tmux_enabled: false,
             tmux_scrollback_limit: 0,
-            auto_restore_sessions: false,
             session_mapping: HashMap::new(),
             speech_provider: "whisper".to_string(),
             alibaba_api_key: String::new(),
@@ -135,7 +133,6 @@ mod tests {
         let settings = AppSettings::default();
         assert!(!settings.tmux_enabled);
         assert_eq!(settings.tmux_scrollback_limit, 0);
-        assert!(!settings.auto_restore_sessions);
         assert!(settings.session_mapping.is_empty());
     }
 

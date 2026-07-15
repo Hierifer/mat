@@ -38,7 +38,7 @@ impl PtyManager {
         tmux_enabled: bool,
         tmux_session_name: Option<String>,
         cwd: Option<String>,
-    ) -> Result<String, String> {
+    ) -> Result<(String, Option<String>), String> {
         let session_id = Uuid::now_v7().to_string();
 
         let pty_pair = self.pty_system
@@ -62,7 +62,7 @@ impl PtyManager {
             // Create tmux session if it doesn't exist
             if !TmuxManager::session_exists(&session_name).unwrap_or(false) {
                 let shell_str = shell_path.to_str().ok_or("Invalid shell path")?;
-                TmuxManager::create_session(&session_name, shell_str, None)?;
+                TmuxManager::create_session(&session_name, shell_str, cwd.as_deref())?;
                 log::info!("Created new tmux session: {}", session_name);
             } else {
                 log::info!("Attaching to existing tmux session: {}", session_name);
@@ -161,14 +161,14 @@ impl PtyManager {
             log::info!(
                 "PTY session created with tmux: {} -> {} (total sessions: {})",
                 session_id,
-                tmux_session.unwrap_or_default(),
+                tmux_session.clone().unwrap_or_default(),
                 self.sessions.len()
             );
         } else {
             log::info!("PTY session created: {} (total sessions: {})", session_id, self.sessions.len());
         }
 
-        Ok(session_id)
+        Ok((session_id, tmux_session))
     }
 
     /// Set up zsh shell integration via ZDOTDIR override.
@@ -272,8 +272,20 @@ precmd_functions+=(_materm_report_cwd)
         Ok(())
     }
 
-    pub fn close(&mut self, session_id: &str) -> Result<(), String> {
+    pub fn close(&mut self, session_id: &str, kill_tmux: bool) -> Result<(), String> {
         log::info!("Closing PTY session: {} (before: {} sessions)", session_id, self.sessions.len());
+        if kill_tmux {
+            if let Some(session) = self.sessions.get(session_id) {
+                if session.tmux_enabled {
+                    if let Some(name) = &session.tmux_session_name {
+                        match TmuxManager::kill_session(name) {
+                            Ok(()) => log::info!("Killed tmux session: {}", name),
+                            Err(e) => log::warn!("Failed to kill tmux session {}: {}", name, e),
+                        }
+                    }
+                }
+            }
+        }
         self.sessions.remove(session_id);
         log::info!("Session closed (remaining: {} sessions)", self.sessions.len());
         Ok(())

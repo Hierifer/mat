@@ -6,6 +6,7 @@ import { SerializeAddon } from '@xterm/addon-serialize'
 import { getAllTerminals } from '@/composables/xterm-manager'
 
 const SAVED_STATE_KEY = 'materm_terminal_state'
+const TMUX_LAYOUT_KEY = 'materm_tmux_layout'
 
 export interface SavedTerminalState {
   tabs: Array<{
@@ -17,6 +18,17 @@ export interface SavedTerminalState {
   activeTabId: string | null
   activePaneId: string | null
   paneContents: Record<string, string> // paneId -> serialized terminal content
+}
+
+export interface SavedLayoutSnapshot {
+  tabs: Array<{
+    id: string
+    title: string
+    titleManuallySet?: boolean
+    layout: SplitNode
+  }>
+  activeTabId: string | null
+  activePaneId: string | null
 }
 
 export interface TerminalTab {
@@ -46,7 +58,6 @@ export interface TmuxSessionInfo {
 export interface AppSettings {
   tmuxEnabled: boolean
   tmuxScrollbackLimit: number
-  autoRestoreSessions: boolean
   sessionMapping: Record<string, string>
 }
 
@@ -102,6 +113,18 @@ function shortenPath(cwd: string): string {
     .replace(/^\/home\/[^/]+/, '~')
 }
 
+// Strip sessionId from a layout tree (sessions are recreated on restore)
+function stripSessionIds(node: SplitNode): SplitNode {
+  if (node.type === 'pane') {
+    return { type: 'pane', paneId: node.paneId, cwd: node.cwd, size: node.size }
+  }
+  return {
+    type: node.type,
+    size: node.size,
+    children: node.children?.map(stripSessionIds),
+  }
+}
+
 export const useTerminalStore = defineStore("terminal", {
   state: () => ({
     tabs: [] as TerminalTab[],
@@ -120,7 +143,6 @@ export const useTerminalStore = defineStore("terminal", {
     tmuxEnabled: false,
     tmuxSessions: [] as TmuxSessionInfo[],
     sessionMapping: {} as Record<string, string>, // paneId -> tmux session name
-    autoRestoreSessions: false,
     isSessionManagerOpen: false,
     displayMode: 'tabs' as 'tabs' | 'studio', // 布局模式
     // Studio mode state (multi-project tabs)
@@ -278,33 +300,57 @@ export const useTerminalStore = defineStore("terminal", {
       return false;
     },
 
-    async createTab() {
-      const tabId = `tab_${Date.now()}`;
-      const paneId = `pane_${Date.now()}`;
-
-      // Spawn PTY session
+    /**
+     * Unified PTY spawn entry for all pane-creation paths.
+     * Spawns with tmux when tmux mode is enabled (falling back to a plain
+     * shell if tmux spawn fails), and records the paneId -> tmux session
+     * mapping for later reattach.
+     */
+    async spawnPtyForPane(paneId: string, cwd?: string): Promise<{ sessionId: string; cwd: string }> {
       let sessionId = `mock_session_${Date.now()}`;
-      let cwd = "~";
+      let resolvedCwd = cwd || "~";
+
+      // @ts-ignore
+      if (!window.__TAURI_INTERNALS__) {
+        console.warn("Tauri environment not detected. Using mock session ID.");
+        return { sessionId, cwd: resolvedCwd };
+      }
+
+      const spawn = (tmuxEnabled: boolean) =>
+        invoke<{ session_id: string; cwd: string; tmux_session_name?: string | null }>(
+          "pty_spawn",
+          { cols: 80, rows: 24, tmuxEnabled, cwd: cwd || undefined },
+        );
 
       try {
-        // Check if running in Tauri environment
-        // @ts-ignore
-        if (window.__TAURI_INTERNALS__) {
-          const response = await invoke<{ session_id: string; cwd: string }>(
-            "pty_spawn",
-            { cols: 80, rows: 24 },
-          );
-          sessionId = response.session_id;
-          cwd = response.cwd;
-          console.log(`[Store] Created PTY session for new tab: ${sessionId}`);
-        } else {
-          console.warn(
-            "Tauri environment not detected. Using mock session ID.",
-          );
+        let response;
+        try {
+          response = await spawn(this.tmuxEnabled);
+        } catch (error) {
+          if (!this.tmuxEnabled) throw error;
+          // tmux spawn failed (e.g. tmux not installed) — fall back to plain shell
+          console.warn("tmux spawn failed, falling back to plain shell:", error);
+          response = await spawn(false);
+        }
+        sessionId = response.session_id;
+        resolvedCwd = response.cwd;
+
+        if (response.tmux_session_name) {
+          this.sessionMapping[paneId] = response.tmux_session_name;
+          await this.saveSessionMapping();
         }
       } catch (error) {
         console.error("Failed to spawn PTY session:", error);
       }
+
+      return { sessionId, cwd: resolvedCwd };
+    },
+
+    async createTab() {
+      const tabId = `tab_${Date.now()}`;
+      const paneId = `pane_${Date.now()}`;
+
+      const { sessionId, cwd } = await this.spawnPtyForPane(paneId);
 
       const tab: TerminalTab = {
         id: tabId,
@@ -343,13 +389,20 @@ export const useTerminalStore = defineStore("terminal", {
         try {
           // @ts-ignore
           if (window.__TAURI_INTERNALS__) {
-            await invoke("pty_close", { sessionId: node.sessionId });
+            await invoke("pty_close", {
+              sessionId: node.sessionId,
+              killTmux: this.tmuxEnabled,
+            });
             console.log(
               `[Store] Successfully closed session: ${node.sessionId}`,
             );
           }
         } catch (error) {
           console.error("Failed to close PTY session:", error);
+        }
+        if (node.paneId && this.sessionMapping[node.paneId]) {
+          delete this.sessionMapping[node.paneId];
+          await this.saveSessionMapping();
         }
       } else if (node.children) {
         for (const child of node.children) {
@@ -430,29 +483,9 @@ export const useTerminalStore = defineStore("terminal", {
       const targetNode = this.findNodeByPaneId(tab.layout, paneId);
       if (!targetNode || targetNode.type !== "pane") return;
 
-      // Create new PTY session
+      // Create new PTY session (inherit cwd from the pane being split)
       const newPaneId = `pane_${Date.now()}`;
-      let sessionId = `mock_session_${Date.now()}`;
-      let cwd = targetNode.cwd || "~";
-
-      try {
-        // Check if running in Tauri environment
-        // @ts-ignore
-        if (window.__TAURI_INTERNALS__) {
-          const response = await invoke<{ session_id: string; cwd: string }>(
-            "pty_spawn",
-            { cols: 80, rows: 24 },
-          );
-          sessionId = response.session_id;
-          cwd = response.cwd;
-        } else {
-          console.warn(
-            "Tauri environment not detected. Using mock session ID for split.",
-          );
-        }
-      } catch (error) {
-        console.error("Failed to spawn PTY session for split:", error);
-      }
+      const { sessionId, cwd } = await this.spawnPtyForPane(newPaneId, targetNode.cwd);
 
       // Build new layout with two panes
       const newLayout: SplitNode = {
@@ -510,11 +543,18 @@ export const useTerminalStore = defineStore("terminal", {
             try {
               // @ts-ignore
               if (window.__TAURI_INTERNALS__) {
-                invoke("pty_close", { sessionId: child.sessionId });
+                invoke("pty_close", {
+                  sessionId: child.sessionId,
+                  killTmux: this.tmuxEnabled,
+                });
               }
             } catch (error) {
               console.error("Failed to close PTY session:", error);
             }
+          }
+          if (this.sessionMapping[paneId]) {
+            delete this.sessionMapping[paneId];
+            this.saveSessionMapping();
           }
 
           // Remove this child
@@ -562,7 +602,6 @@ export const useTerminalStore = defineStore("terminal", {
         // Load settings from backend
         const settings = await invoke<AppSettings>('settings_get');
         this.tmuxEnabled = settings.tmuxEnabled;
-        this.autoRestoreSessions = settings.autoRestoreSessions;
         this.sessionMapping = settings.sessionMapping;
 
         if (this.tmuxEnabled) {
@@ -580,7 +619,6 @@ export const useTerminalStore = defineStore("terminal", {
           settings: {
             tmuxEnabled: enabled,
             tmuxScrollbackLimit: 0,
-            autoRestoreSessions: this.autoRestoreSessions,
             sessionMapping: this.sessionMapping,
           }
         });
@@ -612,7 +650,7 @@ export const useTerminalStore = defineStore("terminal", {
       try {
         // @ts-ignore
         if (window.__TAURI_INTERNALS__) {
-          const response = await invoke<{ session_id: string; cwd: string }>(
+          const response = await invoke<{ session_id: string; cwd: string; tmux_session_name?: string | null }>(
             "pty_spawn",
             {
               cols: 80,
@@ -625,8 +663,8 @@ export const useTerminalStore = defineStore("terminal", {
           cwd = response.cwd;
 
           // Store session mapping if tmux is enabled
-          if (this.tmuxEnabled && sessionName) {
-            this.sessionMapping[paneId] = sessionName;
+          if (response.tmux_session_name) {
+            this.sessionMapping[paneId] = response.tmux_session_name;
             await this.saveSessionMapping();
           }
 
@@ -699,27 +737,173 @@ export const useTerminalStore = defineStore("terminal", {
       }
     },
 
+    /**
+     * Persist the current tab/split layout (without sessionIds) so that
+     * tmux sessions can be reattached into the same layout after restart.
+     */
+    saveLayoutSnapshot() {
+      try {
+        const snapshot: SavedLayoutSnapshot = {
+          tabs: this.tabs.map(tab => ({
+            id: tab.id,
+            title: tab.title,
+            titleManuallySet: tab.titleManuallySet,
+            layout: stripSessionIds(tab.layout),
+          })),
+          activeTabId: this.activeTabId,
+          activePaneId: this.activePaneId,
+        };
+        localStorage.setItem(TMUX_LAYOUT_KEY, JSON.stringify(snapshot));
+      } catch (err) {
+        console.error('[Store] Failed to save layout snapshot:', err);
+      }
+    },
+
+    /**
+     * Recursively rebuild a layout tree by reattaching to live tmux sessions
+     * (via sessionMapping) or spawning fresh sessions for dead panes.
+     */
+    async rebuildTmuxLayout(
+      node: SplitNode,
+      aliveNames: Set<string>,
+      usedSessions: Set<string>,
+    ): Promise<SplitNode> {
+      if (node.type === 'pane') {
+        const paneId = node.paneId || `pane_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const mapped = this.sessionMapping[paneId];
+
+        if (mapped && aliveNames.has(mapped) && !usedSessions.has(mapped)) {
+          usedSessions.add(mapped);
+          try {
+            const response = await invoke<{ session_id: string; cwd: string }>(
+              'tmux_attach_session',
+              { name: mapped, cols: 80, rows: 24 },
+            );
+            return {
+              type: 'pane',
+              paneId,
+              sessionId: response.session_id,
+              cwd: response.cwd || node.cwd,
+              size: node.size,
+            };
+          } catch (error) {
+            console.error(`[Store] Failed to reattach tmux session ${mapped}:`, error);
+          }
+        }
+
+        // Session is gone (or attach failed) — spawn a fresh one in the saved cwd
+        const { sessionId, cwd } = await this.spawnPtyForPane(paneId, node.cwd);
+        return {
+          type: 'pane',
+          paneId,
+          sessionId,
+          cwd: cwd || node.cwd,
+          size: node.size,
+        };
+      }
+
+      const children: SplitNode[] = [];
+      for (const child of node.children || []) {
+        children.push(await this.rebuildTmuxLayout(child, aliveNames, usedSessions));
+      }
+      return { type: node.type, size: node.size, children };
+    },
+
+    /**
+     * Restore terminals after restart in tmux mode: rebuild the saved layout
+     * by reattaching live tmux sessions, attach orphan mat_ sessions as
+     * standalone tabs, and clean up stale sessionMapping entries.
+     */
     async restoreSessions() {
       try {
-        const sessions = await invoke<TmuxSessionInfo[]>('tmux_list_sessions');
-
-        if (sessions.length === 0) {
-          // No sessions to restore, create default
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) {
           await this.createTab();
           return;
         }
 
-        // Restore each MAT session as a tab
-        for (const session of sessions) {
-          if (session.name.startsWith('mat_')) {
-            await this.attachToTmuxSession(session.name);
+        const sessions = await invoke<TmuxSessionInfo[]>('tmux_list_sessions');
+        const aliveNames = new Set(
+          sessions.filter(s => s.name.startsWith('mat_')).map(s => s.name),
+        );
+
+        let snapshot: SavedLayoutSnapshot | null = null;
+        try {
+          const raw = localStorage.getItem(TMUX_LAYOUT_KEY);
+          if (raw) snapshot = JSON.parse(raw);
+        } catch (err) {
+          console.warn('[Store] Invalid layout snapshot, ignoring:', err);
+        }
+
+        const usedSessions = new Set<string>();
+
+        // 1. Rebuild tabs from the layout snapshot
+        if (snapshot?.tabs?.length) {
+          for (const savedTab of snapshot.tabs) {
+            const layout = await this.rebuildTmuxLayout(savedTab.layout, aliveNames, usedSessions);
+            this.tabs.push({
+              id: savedTab.id,
+              title: savedTab.title,
+              titleManuallySet: savedTab.titleManuallySet,
+              layout,
+              createdAt: Date.now(),
+            });
           }
         }
 
-        console.log(`Restored ${sessions.length} tmux sessions`);
+        // 2. Orphan mat_ sessions not referenced by the snapshot -> standalone tabs
+        for (const name of aliveNames) {
+          if (!usedSessions.has(name)) {
+            await this.attachToTmuxSession(name);
+          }
+        }
+
+        // 3. Fallback: nothing restored at all
+        if (this.tabs.length === 0) {
+          await this.createTab();
+          return;
+        }
+
+        // 4. Restore active tab/pane from snapshot (attachToTmuxSession may have overridden them)
+        if (snapshot?.activeTabId && this.tabs.find(t => t.id === snapshot!.activeTabId)) {
+          this.activeTabId = snapshot.activeTabId;
+          if (snapshot.activePaneId) {
+            this.activePaneId = snapshot.activePaneId;
+          }
+        } else if (!this.activeTabId) {
+          this.activeTabId = this.tabs[0].id;
+        }
+
+        const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+        if (activeTab) {
+          this.syncWindowTitle(activeTab.title);
+        }
+
+        // 5. Clean up sessionMapping entries whose panes no longer exist
+        const validPaneIds = new Set<string>();
+        const collectPaneIds = (node: SplitNode) => {
+          if (node.type === 'pane' && node.paneId) validPaneIds.add(node.paneId);
+          node.children?.forEach(collectPaneIds);
+        };
+        for (const tab of this.tabs) collectPaneIds(tab.layout);
+
+        let mappingChanged = false;
+        for (const paneId of Object.keys(this.sessionMapping)) {
+          if (!validPaneIds.has(paneId)) {
+            delete this.sessionMapping[paneId];
+            mappingChanged = true;
+          }
+        }
+        if (mappingChanged) {
+          await this.saveSessionMapping();
+        }
+
+        console.log(`[Store] Restored ${this.tabs.length} tabs from tmux sessions`);
       } catch (error) {
         console.error('Failed to restore sessions:', error);
-        await this.createTab(); // Fallback to default tab
+        if (this.tabs.length === 0) {
+          await this.createTab(); // Fallback to default tab
+        }
       }
     },
 
@@ -774,7 +958,6 @@ export const useTerminalStore = defineStore("terminal", {
           settings: {
             tmuxEnabled: this.tmuxEnabled,
             tmuxScrollbackLimit: 0,
-            autoRestoreSessions: this.autoRestoreSessions,
             sessionMapping: this.sessionMapping,
           }
         });
@@ -1222,24 +1405,12 @@ export const useTerminalStore = defineStore("terminal", {
           }
         }
 
-        // Strip sessionId from layout (sessions will be recreated)
-        const stripSessions = (node: SplitNode): SplitNode => {
-          if (node.type === 'pane') {
-            return { type: 'pane', paneId: node.paneId, cwd: node.cwd, size: node.size }
-          }
-          return {
-            type: node.type,
-            size: node.size,
-            children: node.children?.map(stripSessions),
-          }
-        }
-
         const state: SavedTerminalState = {
           tabs: this.tabs.map(tab => ({
             id: tab.id,
             title: tab.title,
             titleManuallySet: tab.titleManuallySet,
-            layout: stripSessions(tab.layout),
+            layout: stripSessionIds(tab.layout),
           })),
           activeTabId: this.activeTabId,
           activePaneId: this.activePaneId,
@@ -1338,10 +1509,11 @@ export const useTerminalStore = defineStore("terminal", {
      */
     async rebuildLayoutWithSessions(node: SplitNode): Promise<SplitNode> {
       if (node.type === 'pane') {
-        const { sessionId, cwd } = await this.spawnPaneWithCwd(node.cwd)
+        const paneId = node.paneId || `pane_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+        const { sessionId, cwd } = await this.spawnPtyForPane(paneId, node.cwd)
         return {
           type: 'pane',
-          paneId: node.paneId, // Keep the same paneId so saved content matches
+          paneId, // Keep the same paneId so saved content matches
           sessionId,
           cwd: cwd || node.cwd,
           size: node.size,
@@ -1358,50 +1530,13 @@ export const useTerminalStore = defineStore("terminal", {
       }
     },
 
-    async spawnPaneWithCwd(cwd?: string): Promise<{ sessionId: string; cwd: string }> {
-      let sessionId = `mock_session_${Date.now()}`;
-      let resolvedCwd = cwd || '~';
-
-      try {
-        // @ts-ignore
-        if (window.__TAURI_INTERNALS__) {
-          const response = await invoke<{ session_id: string; cwd: string }>(
-            'pty_spawn',
-            { cols: 80, rows: 24, cwd: cwd || undefined },
-          );
-          sessionId = response.session_id;
-          resolvedCwd = response.cwd;
-        }
-      } catch (error) {
-        console.error('Failed to spawn PTY session:', error);
-      }
-
-      return { sessionId, cwd: resolvedCwd };
-    },
-
     // ============================================================================
     // Preset Layout Actions
     // ============================================================================
 
     async spawnPane(): Promise<{ paneId: string; sessionId: string; cwd: string }> {
       const paneId = `pane_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      let sessionId = `mock_session_${Date.now()}`;
-      let cwd = '~';
-
-      try {
-        // @ts-ignore
-        if (window.__TAURI_INTERNALS__) {
-          const response = await invoke<{ session_id: string; cwd: string }>(
-            'pty_spawn',
-            { cols: 80, rows: 24 },
-          );
-          sessionId = response.session_id;
-          cwd = response.cwd;
-        }
-      } catch (error) {
-        console.error('Failed to spawn PTY session:', error);
-      }
-
+      const { sessionId, cwd } = await this.spawnPtyForPane(paneId);
       return { paneId, sessionId, cwd };
     },
 

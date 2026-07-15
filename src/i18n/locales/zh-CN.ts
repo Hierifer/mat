@@ -28,9 +28,7 @@ export default {
     tmux: {
       title: 'tmux 集成',
       enable: '启用 tmux 会话管理',
-      enableDesc: '使用 tmux 实现会话持久化和无限回滚',
-      autoRestore: '启动时自动恢复会话',
-      autoRestoreDesc: '重启应用时自动连接到之前的 tmux 会话',
+      enableDesc: '使用 tmux 实现会话持久化和无限回滚，重启应用时自动恢复之前的终端布局与会话',
       manageSession: '管理 tmux 会话',
     },
     speech: {

@@ -192,6 +192,26 @@ impl TmuxManager {
         format!("tmux attach-session -t {}", name)
     }
 
+    /// Get the current working directory of a session's active pane
+    pub fn get_session_cwd(name: &str) -> Result<String, String> {
+        let output = Command::new("tmux")
+            .args(&["display-message", "-p", "-t", name, "-F", "#{pane_current_path}"])
+            .output()
+            .map_err(|e| format!("Failed to get tmux session cwd: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("tmux display-message failed: {}", stderr));
+        }
+
+        let cwd = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if cwd.is_empty() {
+            return Err("tmux returned empty cwd".to_string());
+        }
+
+        Ok(cwd)
+    }
+
     /// Kill (terminate) a tmux session
     pub fn kill_session(name: &str) -> Result<(), String> {
         let output = Command::new("tmux")

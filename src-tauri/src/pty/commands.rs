@@ -10,6 +10,7 @@ use serde::Serialize;
 pub struct PtySpawnResponse {
     pub session_id: String,
     pub cwd: String,
+    pub tmux_session_name: Option<String>,
 }
 
 #[command]
@@ -34,7 +35,7 @@ pub async fn pty_spawn(
         _ => home,
     };
 
-    let session_id = manager
+    let (session_id, tmux_session_name) = manager
         .lock()
         .await
         .spawn_shell(cols, rows, app_handle, tmux_enabled, tmux_session_name, cwd)
@@ -43,6 +44,7 @@ pub async fn pty_spawn(
     Ok(PtySpawnResponse {
         session_id,
         cwd: resolved_cwd,
+        tmux_session_name,
     })
 }
 
@@ -69,8 +71,9 @@ pub async fn pty_resize(
 pub async fn pty_close(
     manager: State<'_, Arc<Mutex<PtyManager>>>,
     session_id: String,
+    kill_tmux: Option<bool>,
 ) -> Result<(), String> {
-    manager.lock().await.close(&session_id)
+    manager.lock().await.close(&session_id, kill_tmux.unwrap_or(false))
 }
 
 #[command]
@@ -103,19 +106,23 @@ pub async fn tmux_attach_session(
     }
 
     // Spawn PTY with tmux session
-    let session_id = manager
+    let (session_id, tmux_session_name) = manager
         .lock()
         .await
         .spawn_shell(cols, rows, app_handle, true, Some(name.clone()), None)
         .await?;
 
-    let cwd = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| "~".to_string());
+    // Use the tmux session's actual working directory; fall back to home
+    let cwd = TmuxManager::get_session_cwd(&name).unwrap_or_else(|_| {
+        std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| "~".to_string())
+    });
 
     Ok(PtySpawnResponse {
         session_id,
         cwd,
+        tmux_session_name,
     })
 }
 
