@@ -23,7 +23,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
 log = "0.4"
-git2 = "0.19"
+# Local-only git operations (status/log/worktree/stash); disable default
+# https/ssh features so openssl-sys is not required at build time
+git2 = { version = "0.19", default-features = false }
 
 # PTY support
 portable-pty = "0.8"
