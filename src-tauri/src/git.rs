@@ -364,24 +364,63 @@ pub fn git_stash_drop(repo_path: String, index: Option<usize>) -> Result<(), Str
 // CLI-based worktree/branch operations (unchanged)
 // ============================================================================
 
+/// Creates a worktree for `branch_name` and returns the effective worktree path.
+/// - Branch doesn't exist: create it from `base_branch` with a new worktree
+/// - Branch exists without a worktree: attach a new worktree to it
+/// - Branch exists with a worktree: reuse and return the existing worktree path
 #[tauri::command]
 pub fn git_create_worktree(
     repo_path: String,
     branch_name: String,
     base_branch: String,
     worktree_path: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
+    let branch_ref = format!("refs/heads/{}", branch_name);
+    let branch_exists = Command::new("git")
+        .args(["-C", &repo_path, "rev-parse", "--verify", "--quiet", &branch_ref])
+        .output()
+        .map_err(|e| format!("Failed to run git rev-parse: {}", e))?
+        .status
+        .success();
+
+    if branch_exists {
+        // Check if the branch is already checked out in an existing worktree
+        let list_output = Command::new("git")
+            .args(["-C", &repo_path, "worktree", "list", "--porcelain"])
+            .output()
+            .map_err(|e| format!("Failed to run git worktree list: {}", e))?;
+
+        let stdout = String::from_utf8_lossy(&list_output.stdout);
+        let mut current_path: Option<&str> = None;
+        for line in stdout.lines() {
+            if let Some(p) = line.strip_prefix("worktree ") {
+                current_path = Some(p);
+            } else if let Some(b) = line.strip_prefix("branch ") {
+                if b == branch_ref {
+                    if let Some(p) = current_path {
+                        return Ok(p.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Clean up stale worktree registrations before adding
+    let _ = Command::new("git")
+        .args(["-C", &repo_path, "worktree", "prune"])
+        .output();
+
+    let mut args: Vec<&str> = vec!["-C", &repo_path, "worktree", "add", &worktree_path];
+    if branch_exists {
+        args.push(&branch_name);
+    } else {
+        args.push("-b");
+        args.push(&branch_name);
+        args.push(&base_branch);
+    }
+
     let output = Command::new("git")
-        .args([
-            "-C",
-            &repo_path,
-            "worktree",
-            "add",
-            &worktree_path,
-            "-b",
-            &branch_name,
-            &base_branch,
-        ])
+        .args(&args)
         .output()
         .map_err(|e| format!("Failed to run git worktree add: {}", e))?;
 
@@ -390,7 +429,7 @@ pub fn git_create_worktree(
         return Err(format!("git worktree add failed: {}", stderr));
     }
 
-    Ok(())
+    Ok(worktree_path)
 }
 
 #[tauri::command]

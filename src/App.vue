@@ -478,7 +478,7 @@ onUnmounted(() => {
 
       <div v-else class="studio-layout">
         <studio-sidebar />
-        <div class="studio-content">
+        <div class="studio-content" :class="{ 'light-theme': isLightTheme }">
           <template v-for="branch in terminalStore.studioBranches" :key="branch.id">
             <div
               v-show="branch.id === terminalStore.activeStudioBranchId"
@@ -598,6 +598,16 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #1e1e1e;
+  transition: background 0.3s;
+}
+
+.studio-content.light-theme {
+  background: #f3f3f3;
+}
+
+.studio-content.light-theme .branch-view-toolbar {
+  border-bottom-color: #ddd;
 }
 
 .branch-view {

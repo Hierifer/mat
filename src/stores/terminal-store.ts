@@ -1148,6 +1148,13 @@ export const useTerminalStore = defineStore("terminal", {
       const tab = this.activeStudioTab as StudioTab | undefined
       if (!tab) return
 
+      // Branch already in the list: just switch to it
+      const existing = tab.branches.find(b => b.name === branchName)
+      if (existing) {
+        tab.activeBranchId = existing.id
+        return
+      }
+
       const project = tab.project
       const sanitizedName = branchName.replace(/\//g, '-')
       const worktreePath = `${project.path}/.materm-worktrees/${sanitizedName}`
@@ -1158,7 +1165,9 @@ export const useTerminalStore = defineStore("terminal", {
         // @ts-ignore
         if (!window.__TAURI_INTERNALS__) return
 
-        await invoke('git_create_worktree', {
+        // Returns the effective worktree path: reuses the existing worktree
+        // if the branch is already checked out somewhere
+        const effectivePath = await invoke<string>('git_create_worktree', {
           repoPath: project.path,
           branchName,
           baseBranch: project.defaultBranch,
@@ -1167,13 +1176,13 @@ export const useTerminalStore = defineStore("terminal", {
 
         const response = await invoke<{ session_id: string; cwd: string }>(
           'pty_spawn',
-          { cols: 80, rows: 24, cwd: worktreePath },
+          { cols: 80, rows: 24, cwd: effectivePath },
         )
 
         const branch: StudioBranch = {
           id: branchId,
           name: branchName,
-          worktreePath,
+          worktreePath: effectivePath,
           sessionId: response.session_id,
           paneId,
           createdAt: Date.now(),
