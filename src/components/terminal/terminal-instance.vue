@@ -7,6 +7,7 @@ import { usePtySession } from '@/composables/use-pty-session'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useCommandMonitor } from '@/composables/use-command-monitor'
 import { useClaudeStatus } from '@/composables/use-claude-status'
+import { usePlatform } from '@/composables/use-platform'
 import { xtermManager, type ManagedTerminal } from '@/composables/xterm-manager'
 import { useI18n } from 'vue-i18n'
 import IconFont from '@/components/ui/icon-font.vue'
@@ -33,6 +34,7 @@ const store = useTerminalStore()
 const { connect, write, resize, disconnect, isConnected } = usePtySession(props.sessionId)
 const { monitorInput, processOutput, stopMonitoring, isClaudeCommand } = useCommandMonitor()
 const claudeStatus = useClaudeStatus()
+const { isMacOS } = usePlatform()
 const { t } = useI18n()
 
 // Search functions
@@ -95,6 +97,28 @@ const closeSearch = () => {
 
 // Buffer to accumulate input for command detection
 let inputBuffer = ''
+
+// Forward user input to the PTY and track it for command detection.
+// Used by both xterm's onData and the WebKit shifted-symbol workaround.
+const handleInputData = (data: string) => {
+  write(data)
+
+  if (data === '\r' || data === '\n') {
+    if (inputBuffer.trim()) {
+      monitorInput(props.sessionId, inputBuffer.trim())
+      if (isClaudeCommand(inputBuffer.trim())) {
+        claudeStatus.startSession(props.sessionId)
+      }
+    }
+    inputBuffer = ''
+  } else if (data === '\x7f' || data === '\b') {
+    inputBuffer = inputBuffer.slice(0, -1)
+  } else if (data === '\x03') {
+    inputBuffer = ''
+  } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
+    inputBuffer += data
+  }
+}
 // Track if we've received any data
 let hasReceivedData = false
 // Save normal buffer viewport position across alternate screen buffer switches (TUI apps)
@@ -278,6 +302,25 @@ onMounted(async () => {
       toggleSearchBar()
       return false
     }
+
+    // WebKit (Tauri macOS WKWebView) fires an instantaneous compositionstart
+    // for shifted symbol keys (e.g. Shift+9 = '('), so xterm's CompositionHelper
+    // swallows them (xtermjs/xterm.js#5374). Send the character to the PTY
+    // directly and skip xterm's default handling. Letters are excluded (they
+    // are unaffected), as is active IME composition (e.g. Chinese input).
+    if (
+      isMacOS() &&
+      e.type === 'keydown' &&
+      e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey &&
+      !e.isComposing && e.keyCode !== 229 &&
+      e.key.length === 1 && e.key >= ' ' && e.key <= '~' &&
+      !(e.key >= 'A' && e.key <= 'Z') && !(e.key >= 'a' && e.key <= 'z')
+    ) {
+      e.preventDefault()
+      handleInputData(e.key)
+      return false
+    }
+
     return true
   })
 
@@ -335,25 +378,7 @@ onMounted(async () => {
   }
 
   // Handle user input — register as disposable
-  xtermManager.addDisposable(paneId, terminal.onData((data) => {
-    write(data)
-
-    if (data === '\r' || data === '\n') {
-      if (inputBuffer.trim()) {
-        monitorInput(props.sessionId, inputBuffer.trim())
-        if (isClaudeCommand(inputBuffer.trim())) {
-          claudeStatus.startSession(props.sessionId)
-        }
-      }
-      inputBuffer = ''
-    } else if (data === '\x7f' || data === '\b') {
-      inputBuffer = inputBuffer.slice(0, -1)
-    } else if (data === '\x03') {
-      inputBuffer = ''
-    } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-      inputBuffer += data
-    }
-  }))
+  xtermManager.addDisposable(paneId, terminal.onData(handleInputData))
 
   // Connect to PTY session
   await connect((data) => {
