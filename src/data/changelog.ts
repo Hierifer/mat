@@ -8,6 +8,15 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.5.1': {
+    date: '2026-07-17',
+    features: [
+      'Chrome-style tab bar — active tab matches content color, inactive blends into bar',
+    ],
+    fixes: [
+      'shifted symbol keys (e.g. Shift+9) swallowed by WebKit IME composition in terminal',
+    ],
+  },
   '1.5.0': {
     date: '2026-07-16',
     features: [
@@ -89,13 +98,6 @@ export const changelog: Record<string, ChangelogEntry> = {
     features: [],
     fixes: [
       'disable App Sandbox to restore PTY/shell functionality',
-    ],
-  },
-  '1.2.0': {
-    date: '2026-05-27',
-    features: [],
-    fixes: [
-      'pin Node.js 22 and pnpm 10 in CI to fix build compatibility',
     ],
   },
 }
