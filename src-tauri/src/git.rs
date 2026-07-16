@@ -41,6 +41,9 @@ pub fn git_validate_repo(path: String) -> Result<GitRepoInfo, String> {
     let repo = Repository::open(&path)
         .map_err(|_| "Not a git repository".to_string())?;
 
+    // Empty repo (unborn HEAD) can't create worktrees; seed an initial commit
+    ensure_initial_commit(&repo)?;
+
     let default_branch = detect_default_branch(&repo, &path)?;
 
     let repo_name = std::path::Path::new(&path)
@@ -53,6 +56,34 @@ pub fn git_validate_repo(path: String) -> Result<GitRepoInfo, String> {
         default_branch,
         repo_name,
     })
+}
+
+/// If the repo has no commits yet (unborn HEAD), create an empty initial
+/// commit so branch/worktree operations have a valid base reference.
+fn ensure_initial_commit(repo: &Repository) -> Result<(), String> {
+    if !repo.is_empty().map_err(|e| format!("Failed to inspect repo: {}", e))? {
+        return Ok(());
+    }
+
+    let sig = repo
+        .signature()
+        .or_else(|_| git2::Signature::now("Materm", "materm@local"))
+        .map_err(|e| format!("Failed to create signature: {}", e))?;
+
+    // Commit the current index as-is (empty for a fresh repo, so this
+    // produces an empty initial commit without touching working files)
+    let tree_id = repo
+        .index()
+        .and_then(|mut index| index.write_tree())
+        .map_err(|e| format!("Failed to write tree: {}", e))?;
+    let tree = repo
+        .find_tree(tree_id)
+        .map_err(|e| format!("Failed to find tree: {}", e))?;
+
+    repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+        .map_err(|e| format!("Failed to create initial commit: {}", e))?;
+
+    Ok(())
 }
 
 fn detect_default_branch(repo: &Repository, repo_path: &str) -> Result<String, String> {
