@@ -197,7 +197,11 @@ const handleKeydown = (e: KeyboardEvent) => {
 </script>
 
 <template>
-  <div class="tab-bar" :class="{ 'light-theme': isLightTheme }">
+  <div
+    class="tab-bar"
+    :class="{ 'light-theme': isLightTheme }"
+    :style="{ '--tab-active-bg': store.currentTheme.background }"
+  >
     <!-- macOS style window controls (left side) -->
     <div v-if="isMacOS()" class="window-controls macos">
       <button class="control-btn close" @click="handleClose" title="Close"></button>
@@ -336,8 +340,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   display: flex;
   align-items: center;
   height: 40px;
-  background: #1e1e1e;
-  border-bottom: 1px solid #333;
+  background: #141415;
   padding: 0 12px 0 8px;
   user-select: none;
   gap: 12px;
@@ -346,8 +349,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 .tab-bar.light-theme {
-  background: #f3f3f3;
-  border-bottom: 1px solid #d4d4d4;
+  background: #dee1e6;
 }
 
 .window-controls {
@@ -396,7 +398,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   content: '×';
   font-size: 10px;
   color: #4d0000;
-  font-weight: bold;
+  font-weight: 500;
 }
 
 .control-btn.minimize {
@@ -407,7 +409,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   content: '−';
   font-size: 10px;
   color: #995700;
-  font-weight: bold;
+  font-weight: 500;
 }
 
 .control-btn.maximize {
@@ -418,7 +420,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   content: '+';
   font-size: 10px;
   color: #006400;
-  font-weight: bold;
+  font-weight: 500;
 }
 
 /* Windows/Linux style controls */
@@ -456,6 +458,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 .tab-list {
   display: flex;
   gap: 4px;
+  align-self: flex-end;
   overflow-x: auto;
   overflow-y: hidden;
   flex-shrink: 1;
@@ -511,39 +514,32 @@ const handleKeydown = (e: KeyboardEvent) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  background: #2d2d30;
-  border: 1px solid transparent;
-  border-radius: 4px 4px 0 0;
+  height: 34px;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px 8px 0 0;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s;
   min-width: 120px;
   max-width: 200px;
   position: relative;
 }
 
-.light-theme .tab {
-  background: #e8e8e8;
-}
-
 .tab:hover {
-  background: #37373d;
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .light-theme .tab:hover {
-  background: #d8d8d8;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .tab.active {
-  background: #1e1e1e;
-  border-color: #007acc;
-  border-bottom-color: #1e1e1e;
+  background: var(--tab-active-bg, #1e1e1e);
 }
 
 .light-theme .tab.active {
-  background: #f3f3f3;
-  border-color: #007acc;
-  border-bottom-color: #f3f3f3;
+  background: var(--tab-active-bg, #ffffff);
 }
 
 .tab-number {

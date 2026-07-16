@@ -662,8 +662,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   height: 40px;
-  background: #1e1e1e;
-  border-bottom: 1px solid #333;
+  background: #141415;
   padding: 0 12px 0 8px;
   user-select: none;
   gap: 8px;
@@ -673,8 +672,7 @@ onUnmounted(() => {
 }
 
 .studio-project-bar.light-theme {
-  background: #f3f3f3;
-  border-bottom-color: #d4d4d4;
+  background: #dee1e6;
 }
 
 .studio-project-bar .window-controls.macos {
@@ -712,11 +710,11 @@ onUnmounted(() => {
 }
 
 .studio-project-bar .control-btn.close { background: #ff5f56; }
-.studio-project-bar .control-btn.close::before { content: '\00d7'; font-size: 10px; color: #4d0000; font-weight: bold; }
+.studio-project-bar .control-btn.close::before { content: '\00d7'; font-size: 10px; color: #4d0000; font-weight: 500; }
 .studio-project-bar .control-btn.minimize { background: #ffbd2e; }
-.studio-project-bar .control-btn.minimize::before { content: '\2212'; font-size: 10px; color: #995700; font-weight: bold; }
+.studio-project-bar .control-btn.minimize::before { content: '\2212'; font-size: 10px; color: #995700; font-weight: 500; }
 .studio-project-bar .control-btn.maximize { background: #27c93f; }
-.studio-project-bar .control-btn.maximize::before { content: '+'; font-size: 10px; color: #006400; font-weight: bold; }
+.studio-project-bar .control-btn.maximize::before { content: '+'; font-size: 10px; color: #006400; font-weight: 500; }
 
 .studio-project-bar .window-controls.windows-linux {
   display: flex;
@@ -748,6 +746,7 @@ onUnmounted(() => {
 .studio-tab-list {
   display: flex;
   gap: 4px;
+  align-self: flex-end;
   overflow-x: auto;
   overflow-y: hidden;
   flex-shrink: 1;
@@ -764,40 +763,33 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  background: #2d2d30;
-  border: 1px solid transparent;
-  border-radius: 4px 4px 0 0;
+  height: 34px;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px 8px 0 0;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s;
   min-width: 80px;
   max-width: 180px;
   position: relative;
   white-space: nowrap;
 }
 
-.studio-project-bar.light-theme .studio-tab {
-  background: #e8e8e8;
-}
-
 .studio-tab:hover {
-  background: #37373d;
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .studio-project-bar.light-theme .studio-tab:hover {
-  background: #d8d8d8;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .studio-tab.active {
   background: #1e1e1e;
-  border-color: #007acc;
-  border-bottom-color: #1e1e1e;
 }
 
 .studio-project-bar.light-theme .studio-tab.active {
   background: #f3f3f3;
-  border-color: #007acc;
-  border-bottom-color: #f3f3f3;
 }
 
 .studio-tab-icon {
