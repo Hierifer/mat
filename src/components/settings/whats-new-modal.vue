@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { useI18n } from 'vue-i18n'
 import { changelog } from '@/data/changelog'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const emit = defineEmits(['close'])
 const { t } = useI18n()
@@ -42,7 +43,7 @@ onMounted(async () => {
           <h1>{{ $t('whatsNew.title') }}</h1>
           <p class="header-version">v{{ version }}</p>
         </div>
-        <button class="close-btn" @click="emit('close')">✕</button>
+        <button class="close-btn" @click="emit('close')"><icon-font name="close" :size="11" /></button>
       </div>
 
       <div class="whats-new-content">

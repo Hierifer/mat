@@ -3,6 +3,7 @@ import { useTerminalStore } from '@/stores/terminal-store'
 import { ref, computed, onMounted } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { useI18n } from 'vue-i18n'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const store = useTerminalStore()
 const { t } = useI18n()
@@ -27,7 +28,7 @@ onMounted(async () => {
         </div>
         <h1 class="app-name">Materm</h1>
         <p class="app-version">Version {{ version }}</p>
-        <button class="close-btn" @click="store.toggleAbout">✕</button>
+        <button class="close-btn" @click="store.toggleAbout"><icon-font name="close" :size="11" /></button>
       </div>
 
       <div class="about-content">

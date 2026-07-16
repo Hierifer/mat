@@ -2,6 +2,7 @@
 import { useUpdater } from '@/composables/use-updater'
 import type { UpdateInfo } from '@/composables/use-updater'
 import { useI18n } from 'vue-i18n'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const props = defineProps<{
   updateInfo: UpdateInfo | null
@@ -35,7 +36,7 @@ const handleRestart = async () => {
     <div class="update-dialog">
       <div class="update-header">
         <h2>{{ isChecking ? $t('updater.checkingTitle') : (updateInfo ? $t('updater.title') : $t('updater.noUpdateTitle')) }}</h2>
-        <button class="close-btn" @click="emit('close')" :disabled="isDownloading || isChecking">✕</button>
+        <button class="close-btn" @click="emit('close')" :disabled="isDownloading || isChecking"><icon-font name="close" :size="11" /></button>
       </div>
 
       <!-- Checking state -->
@@ -49,7 +50,7 @@ const handleRestart = async () => {
       <!-- No update available -->
       <div v-else-if="!updateInfo" class="update-content">
         <div class="no-update-state">
-          <div class="no-update-icon">&#10003;</div>
+          <div class="no-update-icon"><icon-font name="check" :size="24" /></div>
           <p class="no-update-text">{{ $t('updater.noUpdateDesc') }}</p>
         </div>
 

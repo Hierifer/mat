@@ -465,3 +465,221 @@ describe('terminal-store tmux persistence', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Studio mode
+// ---------------------------------------------------------------------------
+describe('terminal-store studio mode', () => {
+  const mockInvoke = invoke as ReturnType<typeof vi.fn>
+
+  function addStudioTab(store: ReturnType<typeof useTerminalStore>, id = 'stab_1') {
+    store.studioTabs.push({
+      id,
+      project: { path: '/repo', name: 'repo', defaultBranch: 'main' },
+      branches: [],
+      activeBranchId: null,
+      gitStatus: [],
+      gitLog: [],
+      gitStashes: [],
+    })
+    store.activeStudioTabId = id
+    return store.studioTabs[store.studioTabs.length - 1]
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockInvoke.mockReset()
+    localStorage.clear()
+    ;(window as any).__TAURI_INTERNALS__ = {}
+  })
+
+  afterEach(() => {
+    delete (window as any).__TAURI_INTERNALS__
+  })
+
+  describe('createStudioBranch', () => {
+    beforeEach(() => {
+      mockInvoke.mockImplementation(async (cmd: string, args: any) => {
+        if (cmd === 'pty_spawn') return { session_id: 'sess_branch', cwd: args.cwd }
+        if (cmd === 'git_status' || cmd === 'git_log' || cmd === 'git_stash_list') return []
+        return undefined
+      })
+    })
+
+    it('creates a worktree branch defaulting to the agent view', async () => {
+      const store = useTerminalStore()
+      const tab = addStudioTab(store)
+
+      await store.createStudioBranch('feat/login')
+
+      expect(tab.branches).toHaveLength(1)
+      const branch = tab.branches[0]
+      expect(branch.name).toBe('feat/login')
+      expect(branch.viewMode).toBe('agent')
+      expect(branch.sessionId).toBe('sess_branch')
+      expect(branch.worktreePath).toBe('/repo/.materm-worktrees/feat-login')
+      expect(tab.activeBranchId).toBe(branch.id)
+
+      const worktreeCall = mockInvoke.mock.calls.find(c => c[0] === 'git_create_worktree')!
+      expect(worktreeCall[1]).toMatchObject({
+        repoPath: '/repo',
+        branchName: 'feat/login',
+        baseBranch: 'main',
+      })
+    })
+
+    it('does not auto-start the claude TUI in the terminal', async () => {
+      vi.useFakeTimers()
+      try {
+        const store = useTerminalStore()
+        addStudioTab(store)
+
+        await store.createStudioBranch('feat/x')
+        await vi.advanceTimersByTimeAsync(2000)
+
+        expect(mockInvoke.mock.calls.filter(c => c[0] === 'pty_write')).toHaveLength(0)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  describe('setStudioBranchViewMode', () => {
+    it('switches the view mode of the given branch', () => {
+      const store = useTerminalStore()
+      const tab = addStudioTab(store)
+      tab.branches.push({
+        id: 'b1',
+        name: 'feat/a',
+        worktreePath: '/repo/.materm-worktrees/feat-a',
+        sessionId: 'sess_1',
+        paneId: 'p1',
+        createdAt: Date.now(),
+        viewMode: 'agent',
+      })
+
+      store.setStudioBranchViewMode('b1', 'terminal')
+      expect(tab.branches[0].viewMode).toBe('terminal')
+
+      store.setStudioBranchViewMode('b1', 'agent')
+      expect(tab.branches[0].viewMode).toBe('agent')
+    })
+
+    it('does nothing for an unknown branch id', () => {
+      const store = useTerminalStore()
+      addStudioTab(store)
+
+      expect(() => store.setStudioBranchViewMode('nope', 'terminal')).not.toThrow()
+    })
+  })
+
+  describe('recent projects', () => {
+    it('records a project at the front of the list and persists it', () => {
+      const store = useTerminalStore()
+      store.recordRecentProject('/repo/a', 'a')
+      store.recordRecentProject('/repo/b', 'b')
+
+      expect(store.studioRecentProjects.map(p => p.path)).toEqual(['/repo/b', '/repo/a'])
+      const saved = JSON.parse(localStorage.getItem('materm_studio_recent_projects')!)
+      expect(saved.map((p: any) => p.path)).toEqual(['/repo/b', '/repo/a'])
+    })
+
+    it('moves an existing project to the front instead of duplicating it', () => {
+      const store = useTerminalStore()
+      store.recordRecentProject('/repo/a', 'a')
+      store.recordRecentProject('/repo/b', 'b')
+      store.recordRecentProject('/repo/a', 'a')
+
+      expect(store.studioRecentProjects.map(p => p.path)).toEqual(['/repo/a', '/repo/b'])
+    })
+
+    it('caps the list at 15 entries', () => {
+      const store = useTerminalStore()
+      for (let i = 0; i < 20; i++) {
+        store.recordRecentProject(`/repo/${i}`, `${i}`)
+      }
+
+      expect(store.studioRecentProjects).toHaveLength(15)
+      expect(store.studioRecentProjects[0].path).toBe('/repo/19')
+    })
+
+    it('removes a project from the list', () => {
+      const store = useTerminalStore()
+      store.recordRecentProject('/repo/a', 'a')
+      store.recordRecentProject('/repo/b', 'b')
+
+      store.removeRecentProject('/repo/a')
+
+      expect(store.studioRecentProjects.map(p => p.path)).toEqual(['/repo/b'])
+    })
+  })
+
+  describe('displayMode default & persistence', () => {
+    it('defaults to studio mode when nothing is saved', () => {
+      const store = useTerminalStore()
+      expect(store.displayMode).toBe('studio')
+    })
+
+    it('respects a previously saved tabs mode', () => {
+      localStorage.setItem('materm_display_mode', 'tabs')
+      setActivePinia(createPinia())
+      const store = useTerminalStore()
+
+      expect(store.displayMode).toBe('tabs')
+    })
+
+    it('falls back to studio for an invalid saved value', () => {
+      localStorage.setItem('materm_display_mode', 'bogus')
+      setActivePinia(createPinia())
+      const store = useTerminalStore()
+
+      expect(store.displayMode).toBe('studio')
+    })
+
+    it('persists the mode when changed', () => {
+      const store = useTerminalStore()
+      store.setDisplayMode('tabs')
+
+      expect(localStorage.getItem('materm_display_mode')).toBe('tabs')
+
+      store.setDisplayMode('studio')
+      expect(localStorage.getItem('materm_display_mode')).toBe('studio')
+    })
+
+    it('persists tabs mode when exiting studio', async () => {
+      const store = useTerminalStore()
+      mockInvoke.mockResolvedValue(undefined)
+
+      await store.exitStudioMode()
+
+      expect(store.displayMode).toBe('tabs')
+      expect(localStorage.getItem('materm_display_mode')).toBe('tabs')
+    })
+  })
+
+  describe('closeStudioTab', () => {
+    it('returns to the home view when the last project tab closes', async () => {
+      const store = useTerminalStore()
+      store.displayMode = 'studio'
+      const tab = addStudioTab(store)
+      tab.branches.push({
+        id: 'b1',
+        name: 'feat/a',
+        worktreePath: '/repo/.materm-worktrees/feat-a',
+        sessionId: 'sess_1',
+        paneId: 'p1',
+        createdAt: Date.now(),
+        viewMode: 'agent',
+      })
+      mockInvoke.mockResolvedValue(undefined)
+
+      await store.closeStudioTab('stab_1')
+
+      expect(store.studioTabs).toHaveLength(0)
+      expect(store.activeStudioTabId).toBeNull()
+      expect(store.displayMode).toBe('studio')
+      const closeCall = mockInvoke.mock.calls.find(c => c[0] === 'pty_close')!
+      expect(closeCall[1]).toEqual({ sessionId: 'sess_1' })
+    })
+  })
+})

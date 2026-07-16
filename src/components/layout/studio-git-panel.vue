@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useI18n } from 'vue-i18n'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const store = useTerminalStore()
 const { t } = useI18n()
@@ -86,9 +87,7 @@ const statusColor = (status: string, staged: boolean): string => {
     <!-- Changes section -->
     <div class="section">
       <div class="section-header" @click="changesOpen = !changesOpen">
-        <svg class="chevron" :class="{ open: changesOpen }" width="10" height="10" viewBox="0 0 10 10">
-          <path d="M3 2L7 5L3 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <icon-font class="chevron" :class="{ open: changesOpen }" name="fold" :size="10" />
         <span class="section-title">{{ t('studio.gitPanel.status') }}</span>
         <span v-if="store.studioGitStatus.length" class="section-badge">{{ store.studioGitStatus.length }}</span>
       </div>
@@ -128,9 +127,7 @@ const statusColor = (status: string, staged: boolean): string => {
     <!-- Stashes section -->
     <div class="section">
       <div class="section-header" @click="stashesOpen = !stashesOpen">
-        <svg class="chevron" :class="{ open: stashesOpen }" width="10" height="10" viewBox="0 0 10 10">
-          <path d="M3 2L7 5L3 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <icon-font class="chevron" :class="{ open: stashesOpen }" name="fold" :size="10" />
         <span class="section-title">{{ t('studio.gitPanel.stash') }}</span>
         <span v-if="store.studioGitStashes.length" class="section-badge">{{ store.studioGitStashes.length }}</span>
       </div>
@@ -171,9 +168,7 @@ const statusColor = (status: string, staged: boolean): string => {
     <!-- Commits section -->
     <div class="section">
       <div class="section-header" @click="commitsOpen = !commitsOpen">
-        <svg class="chevron" :class="{ open: commitsOpen }" width="10" height="10" viewBox="0 0 10 10">
-          <path d="M3 2L7 5L3 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <icon-font class="chevron" :class="{ open: commitsOpen }" name="fold" :size="10" />
         <span class="section-title">{{ t('studio.gitPanel.log') }}</span>
         <span v-if="store.studioGitLog.length" class="section-badge">{{ store.studioGitLog.length }}</span>
       </div>
@@ -195,6 +190,8 @@ const statusColor = (status: string, staged: boolean): string => {
 .git-panel {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
+  max-height: 60%;
   overflow-y: auto;
   overflow-x: hidden;
   border-top: 1px solid #333;
@@ -252,10 +249,12 @@ const statusColor = (status: string, staged: boolean): string => {
   color: #888;
   transition: transform 0.15s;
   flex-shrink: 0;
+  /* fold icon points up; closed = right, open = down */
+  transform: rotate(90deg);
 }
 
 .chevron.open {
-  transform: rotate(90deg);
+  transform: rotate(180deg);
 }
 
 .section-title {

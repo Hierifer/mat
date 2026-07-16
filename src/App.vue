@@ -9,7 +9,9 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
 import TabBar from '@/components/layout/tab-bar.vue'
+import IconFont from '@/components/ui/icon-font.vue'
 import SplitContainer from '@/components/layout/split-container.vue'
+import AgentPanel from '@/components/studio/agent-panel.vue'
 import SettingsModal from '@/components/settings/settings-modal.vue'
 import AboutModal from '@/components/settings/about-modal.vue'
 import UpdateDialog from '@/components/updater/update-dialog.vue'
@@ -17,6 +19,7 @@ import SpeechIndicator from '@/components/speech/speech-indicator.vue'
 import SessionManager from '@/components/terminal/session-manager.vue'
 import ClaudeStatusBar from '@/components/claude/claude-status-bar.vue'
 import StudioSidebar from '@/components/layout/studio-sidebar.vue'
+import StudioHome from '@/components/layout/studio-home.vue'
 import WhatsNewModal from '@/components/settings/whats-new-modal.vue'
 import { usePlatform } from '@/composables/use-platform'
 import { getVersion } from '@tauri-apps/api/app'
@@ -32,7 +35,7 @@ const { isMacOS, isWindows, isLinux } = usePlatform()
 const isLightTheme = computed(() => terminalStore.currentThemeName.includes('Light'))
 
 // Notification system
-const { notifyTaskComplete, notifySuccess, notifyInfo } = useNotification()
+const { notifyInfo } = useNotification()
 
 // Speech recognition — send only final results to terminal
 // Interim results are displayed in the speech indicator UI only.
@@ -150,6 +153,23 @@ const handleStudioClose = async () => {
   } catch (error) { console.error('Failed to close:', error) }
 }
 
+const openProjectPath = async (path: string) => {
+  try {
+    await terminalStore.addStudioProject(path)
+  } catch (error: any) {
+    const shouldInit = await ask(t('studio.initGitConfirm'), {
+      title: t('studio.notGitRepo'),
+      kind: 'warning',
+      okLabel: t('common.confirm'),
+      cancelLabel: t('common.cancel'),
+    })
+    if (shouldInit) {
+      await invoke('git_init_repo', { path })
+      await terminalStore.addStudioProject(path)
+    }
+  }
+}
+
 const handleAddProject = async () => {
   try {
     const selected = await openDialog({
@@ -158,73 +178,23 @@ const handleAddProject = async () => {
       title: t('studio.selectProject'),
     })
     if (!selected) return
-
-    try {
-      await terminalStore.addStudioProject(selected as string)
-    } catch (error: any) {
-      const shouldInit = await ask(t('studio.initGitConfirm'), {
-        title: t('studio.notGitRepo'),
-        kind: 'warning',
-        okLabel: t('common.confirm'),
-        cancelLabel: t('common.cancel'),
-      })
-      if (shouldInit) {
-        await invoke('git_init_repo', { path: selected })
-        await terminalStore.addStudioProject(selected as string)
-      }
-    }
+    await openProjectPath(selected as string)
   } catch (error) {
     console.error('[App] Failed to add studio project:', error)
+  }
+}
+
+const handleOpenRecentProject = async (path: string) => {
+  try {
+    await openProjectPath(path)
+  } catch (error) {
+    console.error('[App] Failed to open recent project:', error)
   }
 }
 
 const handleCloseProject = async (tabId: string) => {
   await terminalStore.closeStudioTab(tabId)
 }
-
-// Watch for studio mode activation — prompt folder picker if no project is set
-watch(
-  () => terminalStore.displayMode,
-  async (mode) => {
-    if (mode === 'studio' && !terminalStore.studioProject) {
-      try {
-        const selected = await openDialog({
-          directory: true,
-          multiple: false,
-          title: t('studio.selectProject'),
-        })
-        if (!selected) {
-          terminalStore.displayMode = 'tabs'
-          return
-        }
-
-        try {
-          await terminalStore.enterStudioMode(selected as string)
-        } catch (enterError: any) {
-          // Not a git repo — ask user if we should init
-          const shouldInit = await ask(t('studio.initGitConfirm'), {
-            title: t('studio.notGitRepo'),
-            kind: 'warning',
-            okLabel: t('common.confirm'),
-            cancelLabel: t('common.cancel'),
-          })
-          if (shouldInit) {
-            await invoke('git_init_repo', { path: selected })
-            await terminalStore.enterStudioMode(selected as string)
-          } else {
-            // User declined — re-open folder picker by re-triggering the watch
-            terminalStore.displayMode = 'tabs'
-            await new Promise(r => setTimeout(r, 100))
-            terminalStore.displayMode = 'studio'
-          }
-        }
-      } catch (error: any) {
-        console.error('[App] Studio mode folder selection failed:', error)
-        terminalStore.displayMode = 'tabs'
-      }
-    }
-  },
-)
 
 // Persist tab/split layout (debounced) so tmux sessions can be reattached
 // into the same layout after restart
@@ -447,6 +417,16 @@ onUnmounted(() => {
         </div>
 
         <div class="studio-tab-list">
+          <!-- Home tab (recent projects) -->
+          <div
+            class="studio-tab studio-home-tab"
+            :class="{ active: terminalStore.activeStudioTabId === null }"
+            @click="terminalStore.goStudioHome()"
+          >
+            <icon-font class="studio-tab-icon" name="home" :size="12" />
+            <span class="studio-tab-name">{{ $t('studio.projects') }}</span>
+          </div>
+
           <div
             v-for="tab in terminalStore.studioTabs"
             :key="tab.id"
@@ -454,37 +434,25 @@ onUnmounted(() => {
             :class="{ active: tab.id === terminalStore.activeStudioTabId }"
             @click="terminalStore.switchStudioTab(tab.id)"
           >
-            <svg class="studio-tab-icon" width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <circle cx="5" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/>
-              <circle cx="5" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/>
-              <circle cx="12" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/>
-              <path d="M5 6V10M7 4H10C11.1 4 12 4.9 12 6" stroke="currentColor" stroke-width="1.2"/>
-            </svg>
+            <icon-font class="studio-tab-icon" name="branch" :size="12" />
             <span class="studio-tab-name">{{ tab.project.name }}</span>
             <button
-              v-if="terminalStore.studioTabs.length > 1"
               class="studio-tab-close"
               @click.stop="handleCloseProject(tab.id)"
-            >&times;</button>
+            ><icon-font name="close" :size="9" /></button>
           </div>
         </div>
 
-        <button class="add-project-btn" @click="handleAddProject" :title="$t('studio.addProject')">+</button>
+        <button class="add-project-btn" @click="handleAddProject" :title="$t('studio.addProject')"><icon-font name="plus" :size="12" /></button>
 
         <div class="drag-spacer" data-tauri-drag-region></div>
 
         <button class="studio-bar-btn" @click="terminalStore.exitStudioMode()" :title="$t('studio.switchToTabs')">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <rect x="1" y="1" width="12" height="3" rx="0.5" stroke="currentColor" stroke-width="1"/>
-            <rect x="1" y="5" width="12" height="8" rx="0.5" stroke="currentColor" stroke-width="1"/>
-          </svg>
+          <icon-font name="layout" :size="13" />
         </button>
 
         <button class="studio-bar-btn" @click="terminalStore.toggleSettings" title="Settings">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.2"/>
-            <path d="M7 1V3M7 11V13M1 7H3M11 7H13M2.76 2.76L4.17 4.17M9.83 9.83L11.24 11.24M11.24 2.76L9.83 4.17M4.17 9.83L2.76 11.24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-          </svg>
+          <icon-font name="setting" :size="14" />
         </button>
 
         <div v-if="isWindows() || isLinux()" class="window-controls windows-linux">
@@ -500,34 +468,56 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="studio-layout">
+      <!-- Home view: recent project list -->
+      <div v-if="terminalStore.activeStudioTabId === null" class="studio-layout">
+        <studio-home
+          @open="handleOpenRecentProject"
+          @browse="handleAddProject"
+        />
+      </div>
+
+      <div v-else class="studio-layout">
         <studio-sidebar />
         <div class="studio-content">
           <template v-for="branch in terminalStore.studioBranches" :key="branch.id">
             <div
               v-show="branch.id === terminalStore.activeStudioBranchId"
-              class="terminal-view"
+              class="branch-view"
             >
-              <split-container
-                v-if="branch.sessionId"
-                :node="{
-                  type: 'pane',
-                  paneId: branch.paneId,
-                  sessionId: branch.sessionId,
-                  cwd: branch.worktreePath,
-                }"
-              />
+              <div class="branch-view-toolbar">
+                <button
+                  class="view-toggle-btn"
+                  :class="{ active: branch.viewMode !== 'terminal' }"
+                  @click="terminalStore.setStudioBranchViewMode(branch.id, 'agent')"
+                >{{ $t('studio.agent.agentView') }}</button>
+                <button
+                  class="view-toggle-btn"
+                  :class="{ active: branch.viewMode === 'terminal' }"
+                  @click="terminalStore.setStudioBranchViewMode(branch.id, 'terminal')"
+                >{{ $t('studio.agent.terminalView') }}</button>
+              </div>
+
+              <div v-show="branch.viewMode !== 'terminal'" class="agent-view">
+                <agent-panel :cwd="branch.worktreePath" />
+              </div>
+
+              <div v-show="branch.viewMode === 'terminal'" class="terminal-view">
+                <split-container
+                  v-if="branch.sessionId"
+                  :node="{
+                    type: 'pane',
+                    paneId: branch.paneId,
+                    sessionId: branch.sessionId,
+                    cwd: branch.worktreePath,
+                  }"
+                />
+              </div>
             </div>
           </template>
 
           <div v-if="terminalStore.studioBranches.length === 0" class="empty-state studio-empty">
             <div class="studio-welcome">
-              <svg width="48" height="48" viewBox="0 0 16 16" fill="none" style="opacity: 0.3; margin-bottom: 12px;">
-                <circle cx="5" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/>
-                <circle cx="5" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/>
-                <circle cx="12" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/>
-                <path d="M5 6V10M7 4H10C11.1 4 12 4.9 12 6" stroke="currentColor" stroke-width="1.2"/>
-              </svg>
+              <icon-font name="branch" :size="48" style="opacity: 0.3; margin-bottom: 12px;" />
               <p>{{ $t('studio.newBranch') }}</p>
             </div>
           </div>
@@ -610,6 +600,50 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.branch-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.branch-view-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.view-toggle-btn {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 10px;
+  transition: all 0.15s;
+}
+
+.view-toggle-btn:hover {
+  color: #ccc;
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.view-toggle-btn.active {
+  color: #fff;
+  background: #0e639c;
+}
+
+.agent-view {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .studio-empty {
   flex-direction: column;
 }
@@ -664,9 +698,11 @@ onUnmounted(() => {
 .studio-project-bar .control-btn::before {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   opacity: 0;
   transition: opacity 0.15s;
 }

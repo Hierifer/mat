@@ -1,3 +1,4 @@
+mod agent;
 mod clipboard;
 mod git;
 mod pty;
@@ -10,6 +11,7 @@ use tokio::sync::Mutex;
 use tauri::{AppHandle, Manager, Emitter}; // Import Manager and Emitter traits
 use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItemKind};
 use pty::manager::PtyManager;
+use agent::manager::AgentManager;
 
 #[tauri::command]
 fn set_update_menu_badge(app: AppHandle, has_update: bool) {
@@ -60,6 +62,9 @@ pub fn run() {
             // Use tokio Mutex for async compatibility in commands
             let pty_manager = Arc::new(Mutex::new(PtyManager::new()));
             app.manage(pty_manager);
+
+            let agent_manager = Arc::new(Mutex::new(AgentManager::new()));
+            app.manage(agent_manager);
 
             // Proactively trigger macOS TCC permission dialogs for protected folders
             #[cfg(target_os = "macos")]
@@ -235,6 +240,10 @@ pub fn run() {
             git::git_stash_pop,
             git::git_stash_apply,
             git::git_stash_drop,
+            // agent commands
+            agent::commands::agent_spawn,
+            agent::commands::agent_send,
+            agent::commands::agent_kill,
             // clipboard commands
             clipboard::save_clipboard_image,
             // speech commands (macOS and Linux only)

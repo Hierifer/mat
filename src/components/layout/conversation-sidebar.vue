@@ -3,6 +3,7 @@ import { ref, computed, inject, type Ref } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { usePlatform } from '@/composables/use-platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const store = useTerminalStore()
 const { isMacOS } = usePlatform()
@@ -133,16 +134,14 @@ const handleKeydown = (e: KeyboardEvent) => {
           v-if="store.tabs.length > 1"
           class="session-close"
           @click="handleCloseSession(tab.id, $event)"
-        >&times;</button>
+        ><icon-font name="close" :size="10" /></button>
       </div>
     </div>
 
     <!-- Footer -->
     <div class="sidebar-footer">
       <button class="footer-btn" @click="handleNewSession" title="New Session">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M7 1V13M1 7H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
+        <icon-font name="plus" :size="12" />
       </button>
 
       <button
@@ -152,25 +151,16 @@ const handleKeydown = (e: KeyboardEvent) => {
         @click="speechRecognition.toggleSpeech"
         title="Voice input"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-          <path d="M8 1C7.17 1 6.5 1.67 6.5 2.5V8C6.5 8.83 7.17 9.5 8 9.5C8.83 9.5 9.5 8.83 9.5 8V2.5C9.5 1.67 8.83 1 8 1Z" fill="currentColor"/>
-          <path d="M11 8C11 9.66 9.66 11 8 11C6.34 11 5 9.66 5 8H3.5C3.5 10.07 5.07 11.75 7 12.09V14H9V12.09C10.93 11.75 12.5 10.07 12.5 8H11Z" fill="currentColor"/>
-        </svg>
+        <icon-font name="microphone" :size="14" />
       </button>
 
       <!-- Toggle to tabs mode -->
       <button class="footer-btn" @click="store.toggleDisplayMode()" title="Switch to tabs mode">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <rect x="1" y="1" width="12" height="3" rx="0.5" stroke="currentColor" stroke-width="1"/>
-          <rect x="1" y="5" width="12" height="8" rx="0.5" stroke="currentColor" stroke-width="1"/>
-        </svg>
+        <icon-font name="layout" :size="13" />
       </button>
 
       <button class="footer-btn" @click="store.toggleSettings" title="Settings">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.2"/>
-          <path d="M7 1V3M7 11V13M1 7H3M11 7H13M2.76 2.76L4.17 4.17M9.83 9.83L11.24 11.24M11.24 2.76L9.83 4.17M4.17 9.83L2.76 11.24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
+        <icon-font name="setting" :size="14" />
       </button>
     </div>
   </div>
@@ -225,9 +215,11 @@ const handleKeydown = (e: KeyboardEvent) => {
 .control-btn::before {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   opacity: 0;
   transition: opacity 0.15s;
 }

@@ -7,6 +7,7 @@ import { usePlatform } from '@/composables/use-platform'
 import { useTts } from '@/composables/use-tts'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useI18n } from 'vue-i18n'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const store = useTerminalStore()
 const { t } = useI18n()
@@ -237,7 +238,7 @@ const handleKeydown = (e: KeyboardEvent) => {
           @click="handleCloseTab(tab.id, $event)"
           title="Close tab"
         >
-          ✕
+          <icon-font name="close" :size="10" />
         </button>
 
         <span
@@ -248,7 +249,7 @@ const handleKeydown = (e: KeyboardEvent) => {
     </div>
 
     <button class="new-tab-btn" @click="handleNewTab" title="New tab">
-      +
+      <icon-font name="plus" :size="14" />
     </button>
 
     <!-- Layout preset dropdown -->
@@ -297,25 +298,16 @@ const handleKeydown = (e: KeyboardEvent) => {
       @click="speechRecognition.toggleSpeech"
       title="Voice input (Ctrl+Shift+V)"
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M8 1C7.17 1 6.5 1.67 6.5 2.5V8C6.5 8.83 7.17 9.5 8 9.5C8.83 9.5 9.5 8.83 9.5 8V2.5C9.5 1.67 8.83 1 8 1Z" fill="currentColor"/>
-        <path d="M11 8C11 9.66 9.66 11 8 11C6.34 11 5 9.66 5 8H3.5C3.5 10.07 5.07 11.75 7 12.09V14H9V12.09C10.93 11.75 12.5 10.07 12.5 8H11Z" fill="currentColor"/>
-      </svg>
+      <icon-font name="microphone" :size="16" />
     </button>
 
     <!-- Toggle to studio mode -->
     <button class="layout-btn" @click="store.toggleDisplayMode()" :title="t('studio.title')">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <rect x="1" y="1" width="5" height="14" rx="1" stroke="currentColor" stroke-width="1.2"/>
-        <rect x="8" y="1" width="7" height="14" rx="1" stroke="currentColor" stroke-width="1.2"/>
-      </svg>
+      <icon-font name="layout" :size="15" />
     </button>
 
     <button class="settings-btn" @click="store.toggleSettings" title="Settings">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2"/>
-        <path d="M8 1.5V3.5M8 12.5V14.5M1.5 8H3.5M12.5 8H14.5M3.4 3.4L4.8 4.8M11.2 11.2L12.6 12.6M12.6 3.4L11.2 4.8M4.8 11.2L3.4 12.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-      </svg>
+      <icon-font name="setting" :size="16" />
     </button>
 
     <!-- Windows/Linux style window controls (right side) -->
@@ -383,9 +375,11 @@ const handleKeydown = (e: KeyboardEvent) => {
 .control-btn::before {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -425,7 +419,6 @@ const handleKeydown = (e: KeyboardEvent) => {
   font-size: 10px;
   color: #006400;
   font-weight: bold;
-  line-height: 1;
 }
 
 /* Windows/Linux style controls */

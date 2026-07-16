@@ -7,6 +7,9 @@ import { getAllTerminals } from '@/composables/xterm-manager'
 
 const SAVED_STATE_KEY = 'materm_terminal_state'
 const TMUX_LAYOUT_KEY = 'materm_tmux_layout'
+const RECENT_PROJECTS_KEY = 'materm_studio_recent_projects'
+const RECENT_PROJECTS_MAX = 15
+const DISPLAY_MODE_KEY = 'materm_display_mode'
 
 export interface SavedTerminalState {
   tabs: Array<{
@@ -67,6 +70,31 @@ export interface StudioProject {
   defaultBranch: string     // detected default branch
 }
 
+export interface StudioRecentProject {
+  path: string
+  name: string
+  lastOpenedAt: number
+}
+
+// Studio is the default layout; the user's last choice is persisted
+function loadDisplayMode(): 'tabs' | 'studio' {
+  const saved = localStorage.getItem(DISPLAY_MODE_KEY)
+  return saved === 'tabs' || saved === 'studio' ? saved : 'studio'
+}
+
+function loadRecentProjects(): StudioRecentProject[] {
+  try {
+    const raw = localStorage.getItem(RECENT_PROJECTS_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    }
+  } catch (err) {
+    console.warn('[Studio] Invalid recent projects data, ignoring:', err)
+  }
+  return []
+}
+
 export interface StudioBranch {
   id: string                // unique ID
   name: string              // branch name (e.g. feat/login)
@@ -74,6 +102,7 @@ export interface StudioBranch {
   sessionId: string | null  // PTY session ID (lazy-created)
   paneId: string            // pane ID
   createdAt: number
+  viewMode: 'agent' | 'terminal'  // which view is shown for this branch
 }
 
 export interface GitFileStatus {
@@ -144,10 +173,11 @@ export const useTerminalStore = defineStore("terminal", {
     tmuxSessions: [] as TmuxSessionInfo[],
     sessionMapping: {} as Record<string, string>, // paneId -> tmux session name
     isSessionManagerOpen: false,
-    displayMode: 'tabs' as 'tabs' | 'studio', // 布局模式
+    displayMode: loadDisplayMode() as 'tabs' | 'studio', // 布局模式（默认 studio，记住上次选择）
     // Studio mode state (multi-project tabs)
     studioTabs: [] as StudioTab[],
-    activeStudioTabId: null as string | null,
+    activeStudioTabId: null as string | null, // null = home tab (recent projects)
+    studioRecentProjects: loadRecentProjects() as StudioRecentProject[],
     // Speech recognition settings
     speechProvider: 'whisper' as 'whisper' | 'alibaba',
     alibabaApiKey: '' as string,
@@ -974,21 +1004,56 @@ export const useTerminalStore = defineStore("terminal", {
       if (this.displayMode === 'studio') {
         this.exitStudioMode()
       } else {
-        this.displayMode = 'studio'
+        this.setDisplayMode('studio')
       }
     },
 
     setDisplayMode(mode: 'tabs' | 'studio') {
-      this.displayMode = mode;
+      this.displayMode = mode
+      localStorage.setItem(DISPLAY_MODE_KEY, mode)
     },
 
     // ============================================================================
     // Studio Mode Actions
     // ============================================================================
 
+    saveRecentProjects() {
+      try {
+        localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(this.studioRecentProjects))
+      } catch (err) {
+        console.error('[Studio] Failed to save recent projects:', err)
+      }
+    },
+
+    recordRecentProject(path: string, name: string) {
+      this.studioRecentProjects = [
+        { path, name, lastOpenedAt: Date.now() },
+        ...this.studioRecentProjects.filter(p => p.path !== path),
+      ].slice(0, RECENT_PROJECTS_MAX)
+      this.saveRecentProjects()
+    },
+
+    removeRecentProject(path: string) {
+      this.studioRecentProjects = this.studioRecentProjects.filter(p => p.path !== path)
+      this.saveRecentProjects()
+    },
+
+    goStudioHome() {
+      this.activeStudioTabId = null
+    },
+
     async addStudioProject(projectPath: string) {
       // @ts-ignore
       if (!window.__TAURI_INTERNALS__) return
+
+      // Already open — just switch to that tab
+      const existing = this.studioTabs.find(t => t.project.path === projectPath)
+      if (existing) {
+        this.activeStudioTabId = existing.id
+        this.recordRecentProject(existing.project.path, existing.project.name)
+        this.refreshAllGitInfo()
+        return
+      }
 
       const info = await invoke<{ default_branch: string; repo_name: string }>(
         'git_validate_repo',
@@ -1012,17 +1077,8 @@ export const useTerminalStore = defineStore("terminal", {
 
       this.studioTabs.push(newTab)
       this.activeStudioTabId = tabId
+      this.recordRecentProject(projectPath, info.repo_name)
       console.log(`[Studio] Added project ${info.repo_name}`)
-    },
-
-    async enterStudioMode(projectPath: string) {
-      try {
-        await this.addStudioProject(projectPath)
-        this.displayMode = 'studio'
-      } catch (error) {
-        console.error('[Studio] Failed to enter studio mode:', error)
-        throw error
-      }
     },
 
     async exitStudioMode() {
@@ -1045,7 +1101,7 @@ export const useTerminalStore = defineStore("terminal", {
       this.studioTabs = []
       this.activeStudioTabId = null
       this.studioGitLoading = false
-      this.displayMode = 'tabs'
+      this.setDisplayMode('tabs')
 
       console.log('[Studio] Exited studio mode')
     },
@@ -1070,10 +1126,9 @@ export const useTerminalStore = defineStore("terminal", {
 
       this.studioTabs = this.studioTabs.filter(t => t.id !== tabId)
 
-      // If no tabs left, exit studio mode
+      // If no tabs left, go to the home tab (recent projects)
       if (this.studioTabs.length === 0) {
         this.activeStudioTabId = null
-        this.displayMode = 'tabs'
         return
       }
 
@@ -1122,6 +1177,7 @@ export const useTerminalStore = defineStore("terminal", {
           sessionId: response.session_id,
           paneId,
           createdAt: Date.now(),
+          viewMode: 'agent',
         }
 
         tab.branches.push(branch)
@@ -1176,6 +1232,14 @@ export const useTerminalStore = defineStore("terminal", {
         tab.activeBranchId = branchId
       }
       this.refreshAllGitInfo()
+    },
+
+    setStudioBranchViewMode(branchId: string, mode: 'agent' | 'terminal') {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      const branch = tab?.branches.find(b => b.id === branchId)
+      if (branch) {
+        branch.viewMode = mode
+      }
     },
 
     // ============================================================================

@@ -9,6 +9,7 @@ import { useCommandMonitor } from '@/composables/use-command-monitor'
 import { useClaudeStatus } from '@/composables/use-claude-status'
 import { xtermManager, type ManagedTerminal } from '@/composables/xterm-manager'
 import { useI18n } from 'vue-i18n'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const props = defineProps<{
   sessionId: string
@@ -128,9 +129,17 @@ const debouncedResize = (cols: number, rows: number) => {
   }, 100) as unknown as number
 }
 
+// Whether the pane is actually visible (v-show hides inactive tabs/branches
+// with display:none — fitting at 0x0 produces garbage dimensions)
+const isPaneVisible = () => {
+  const el = terminalRef.value
+  return !!el && el.clientWidth > 0 && el.clientHeight > 0
+}
+
 // Fit terminal while preserving scroll position
 const safeFit = () => {
   if (!terminal || !managed?.fitAddon) return
+  if (!isPaneVisible()) return
 
   const isAlternateBuffer = terminal.buffer.active === terminal.buffer.alternate
 
@@ -379,6 +388,35 @@ onMounted(async () => {
     claudeStatus.endSession()
   })
 
+  // Re-fit when this pane becomes visible again. Inactive tabs/branches are
+  // hidden via v-show (display:none), so their terminals can't track size
+  // changes while hidden — re-fit and sync the PTY size on reveal so TUI
+  // apps (e.g. Claude Code) render at the correct dimensions.
+  watch(
+    () => [store.activeTabId, store.activePaneId, store.activeStudioTabId, store.activeStudioBranchId, store.displayMode, store.activeStudioBranch?.viewMode],
+    () => {
+      requestAnimationFrame(() => {
+        if (isUnmounting || !terminal || !managed?.fitAddon) return
+        if (!isPaneVisible()) return
+        try {
+          safeFit()
+          const cols = terminal.cols
+          const rows = terminal.rows
+          const dimsChanged =
+            !lastKnownDimensions ||
+            lastKnownDimensions.cols !== cols ||
+            lastKnownDimensions.rows !== rows
+          if (dimsChanged) {
+            lastKnownDimensions = { cols, rows }
+            resize(cols, rows)
+          }
+        } catch (error) {
+          console.warn('[Terminal] Refit on reveal failed:', error)
+        }
+      })
+    },
+  )
+
   // Watch for tab switches - if no data received, trigger refresh
   watch(() => store.activeTabId, async (newTabId) => {
     const currentTab = store.tabs.find(t => t.id === newTabId)
@@ -479,13 +517,13 @@ onUnmounted(() => {
         />
         <span v-if="searchResultInfo" class="search-info">{{ searchResultInfo }}</span>
         <button class="search-nav-btn" @click="doSearch('prev')" title="Previous (Shift+Enter)">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 3L2 7h8L6 3z" fill="currentColor"/></svg>
+          <icon-font name="fold" :size="11" />
         </button>
         <button class="search-nav-btn" @click="doSearch('next')" title="Next (Enter)">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 9L2 5h8L6 9z" fill="currentColor"/></svg>
+          <icon-font name="fold" :size="11" style="transform: rotate(180deg)" />
         </button>
         <button class="search-close-btn" @click="closeSearch">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5"/></svg>
+          <icon-font name="close" :size="10" />
         </button>
       </div>
     </transition>

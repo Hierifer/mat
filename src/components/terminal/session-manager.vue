@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useTerminalStore, type TmuxSessionInfo } from '@/stores/terminal-store'
 import { useI18n } from 'vue-i18n'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const store = useTerminalStore()
 const { t } = useI18n()
@@ -208,7 +209,7 @@ function formatTimestamp(timestamp: number): string {
           :style="{ color: themeColors.mutedColor }"
           @click="close"
         >
-          ✕
+          <icon-font name="close" :size="11" />
         </button>
       </div>
 

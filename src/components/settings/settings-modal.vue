@@ -4,6 +4,7 @@ import { themes } from '@/settings/themes'
 import { availableLocales } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 import { ref, watch, computed } from 'vue'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const store = useTerminalStore()
 const { locale, t } = useI18n()
@@ -146,7 +147,7 @@ const themeColors = computed(() => {
       <div class="settings-content" :style="{ background: themeColors.modalBg }">
         <div class="settings-header" :style="{ borderBottomColor: themeColors.headerBorder }">
             <h3 :style="{ color: themeColors.headerColor }">{{ $t(`settings.${activeCategory.toLowerCase()}`) }}</h3>
-            <button class="close-btn" :style="{ color: themeColors.closeBtnColor }" @click="store.toggleSettings">✕</button>
+            <button class="close-btn" :style="{ color: themeColors.closeBtnColor }" @click="store.toggleSettings"><icon-font name="close" :size="11" /></button>
         </div>
         
         <div v-if="activeCategory === 'Appearance'" class="settings-section">

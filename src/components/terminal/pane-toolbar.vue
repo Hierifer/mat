@@ -3,6 +3,7 @@ import { computed, ref, nextTick, watch } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { usePtySession } from '@/composables/use-pty-session'
 import { useI18n } from 'vue-i18n'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const props = defineProps<{
   paneId: string
@@ -104,21 +105,21 @@ const handleKeydown = (e: KeyboardEvent) => {
         :title="t('paneToolbar.splitHorizontal')"
         class="toolbar-btn"
       >
-        ⬌
+        <icon-font name="split-horizontal" :size="12" />
       </button>
       <button
         @click="handleSplitVertical"
         :title="t('paneToolbar.splitVertical')"
         class="toolbar-btn"
       >
-        ⬍
+        <icon-font name="split-vertical" :size="12" />
       </button>
       <button
         @click="handleClose"
         :title="t('paneToolbar.closePane')"
         class="toolbar-btn close-btn"
       >
-        ✕
+        <icon-font name="close" :size="10" />
       </button>
     </div>
   </div>

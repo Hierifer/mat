@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useI18n } from 'vue-i18n'
 import StudioGitPanel from './studio-git-panel.vue'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const store = useTerminalStore()
 const { t } = useI18n()
@@ -112,12 +113,7 @@ const formatTime = (timestamp: number) => {
         :class="{ active: branch.id === store.activeStudioBranchId }"
         @click="handleBranchClick(branch.id)"
       >
-        <svg class="branch-icon" width="14" height="14" viewBox="0 0 16 16" fill="none">
-          <circle cx="5" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/>
-          <circle cx="5" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/>
-          <circle cx="12" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/>
-          <path d="M5 6V10M7 4H10C11.1 4 12 4.9 12 6" stroke="currentColor" stroke-width="1.2"/>
-        </svg>
+        <icon-font class="branch-icon" name="branch" :size="14" />
         <div class="branch-info">
           <span class="branch-name">{{ branch.name }}</span>
           <span class="branch-time">{{ formatTime(branch.createdAt) }}</span>
@@ -126,7 +122,7 @@ const formatTime = (timestamp: number) => {
           class="branch-delete"
           @click="handleDeleteBranch(branch.id, $event)"
           :title="t('studio.deleteBranch')"
-        >&times;</button>
+        ><icon-font name="close" :size="10" /></button>
       </div>
 
       <!-- Empty state -->
@@ -155,9 +151,7 @@ const formatTime = (timestamp: number) => {
 
       <div v-else class="footer-buttons">
         <button class="footer-btn primary" @click="startCreatingBranch" :title="t('studio.newBranch')">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M7 1V13M1 7H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
+          <icon-font name="plus" :size="12" />
           <span>{{ t('studio.newBranch') }}</span>
         </button>
       </div>
@@ -165,10 +159,7 @@ const formatTime = (timestamp: number) => {
       <div class="footer-actions">
         <!-- Refresh git info -->
         <button class="footer-btn" :class="{ spinning: isRefreshing }" @click="handleRefresh" :title="t('studio.gitPanel.refresh')">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M12 7A5 5 0 1 1 7 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-            <path d="M7 2L10 2L10 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <icon-font name="refresh" :size="13" />
         </button>
       </div>
     </div>
@@ -242,7 +233,8 @@ const formatTime = (timestamp: number) => {
 
 /* Branch list */
 .branch-list {
-  flex-shrink: 0;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 4px 0;

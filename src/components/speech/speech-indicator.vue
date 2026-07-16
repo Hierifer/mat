@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import IconFont from '@/components/ui/icon-font.vue'
 
 const props = defineProps<{
   isListening: boolean
@@ -41,14 +42,11 @@ const statusText = computed(() => {
               />
             </circle>
           </svg>
-          <svg v-else width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M10 2L18 18H2L10 2Z" stroke="currentColor" fill="none" stroke-width="2"/>
-            <text x="10" y="15" text-anchor="middle" fill="currentColor" font-size="12" font-weight="bold">!</text>
-          </svg>
+          <icon-font v-else name="error" :size="20" />
         </div>
         <span class="status-text">{{ statusText }}</span>
         <button @click="emit('stop')" class="stop-btn" title="停止录音 (Ctrl+Shift+V)">
-          ✕
+          <icon-font name="close" :size="10" />
         </button>
       </div>
 
