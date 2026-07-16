@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.5.2': {
+    date: '2026-07-17',
+    features: [],
+    fixes: [
+      'studio branch creation reuses existing branches/worktrees; theme-aware studio content background',
+    ],
+  },
   '1.5.1': {
     date: '2026-07-17',
     features: [
@@ -92,12 +99,5 @@ export const changelog: Record<string, ChangelogEntry> = {
       'add What\'s New dialog and fix updater download progress',
     ],
     fixes: [],
-  },
-  '1.2.1': {
-    date: '2026-05-27',
-    features: [],
-    fixes: [
-      'disable App Sandbox to restore PTY/shell functionality',
-    ],
   },
 }
