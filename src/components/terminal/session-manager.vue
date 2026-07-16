@@ -388,7 +388,7 @@ function formatTimestamp(timestamp: number): string {
 .header h2 {
   margin: 0;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
   transition: color 0.3s;
 }
 

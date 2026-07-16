@@ -259,7 +259,7 @@ const statusColor = (status: string, staged: boolean): string => {
 
 .section-title {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: #aaa;

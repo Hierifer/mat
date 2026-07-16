@@ -133,7 +133,7 @@ onMounted(async () => {
 .app-name {
   margin: 0 0 8px;
   font-size: 32px;
-  font-weight: 600;
+  font-weight: 500;
   color: #ffffff;
   letter-spacing: -0.5px;
 }
@@ -169,7 +169,7 @@ onMounted(async () => {
 .about-section h3 {
   margin: 0 0 15px;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   color: #e7e7e7;
   border-bottom: 1px solid #3e3e42;
   padding-bottom: 8px;
@@ -193,7 +193,7 @@ onMounted(async () => {
 .feature-list li:before {
   content: "✓";
   color: #0078d4;
-  font-weight: bold;
+  font-weight: 500;
   margin-right: 10px;
 }
 

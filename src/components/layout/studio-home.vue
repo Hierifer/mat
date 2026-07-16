@@ -105,7 +105,7 @@ const handleRemove = (path: string, event: Event) => {
 
 .home-title {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
   color: #e7e7e7;
   margin: 0;
 }

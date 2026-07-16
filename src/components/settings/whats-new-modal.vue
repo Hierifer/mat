@@ -130,7 +130,7 @@ onMounted(async () => {
 .header-text h1 {
   margin: 0 0 4px;
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 500;
   color: #ffffff;
 }
 
@@ -185,7 +185,7 @@ onMounted(async () => {
   background: #0078d4;
   color: #fff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   padding: 2px 10px;
   border-radius: 10px;
 }
@@ -201,7 +201,7 @@ onMounted(async () => {
 
 .section-label {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   margin: 0 0 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;

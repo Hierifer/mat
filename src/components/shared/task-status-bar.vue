@@ -103,7 +103,7 @@ const renderedMetrics = computed(() => {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.02em;
 }
 

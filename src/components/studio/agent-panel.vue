@@ -336,7 +336,7 @@ onUnmounted(() => {
 }
 
 .agent-title {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .agent-model {
@@ -456,7 +456,7 @@ onUnmounted(() => {
 .msg-assistant-md :deep(h3),
 .msg-assistant-md :deep(h4) {
   margin: 12px 0 6px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.3;
 }
 
@@ -530,7 +530,7 @@ onUnmounted(() => {
 
 .msg-assistant-md :deep(th) {
   background: rgba(255, 255, 255, 0.05);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .light-theme .msg-assistant-md :deep(th) {
@@ -632,7 +632,7 @@ onUnmounted(() => {
 }
 
 .tool-name {
-  font-weight: 600;
+  font-weight: 500;
   color: #4fc1ff;
   flex-shrink: 0;
 }

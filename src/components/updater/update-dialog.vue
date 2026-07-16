@@ -255,7 +255,7 @@ const handleRestart = async () => {
 
 .version {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 500;
   color: #0078d4;
   margin: 0 0 8px 0;
 }

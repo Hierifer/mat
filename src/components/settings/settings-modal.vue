@@ -553,7 +553,7 @@ const themeColors = computed(() => {
   padding: 0 20px;
   margin-bottom: 20px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   transition: color 0.3s;
 }
@@ -628,7 +628,7 @@ const themeColors = computed(() => {
 .setting-label {
   display: block;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   margin-bottom: 15px;
   transition: color 0.3s;
 }
@@ -782,7 +782,7 @@ const themeColors = computed(() => {
   height: 36px;
   border: 1px solid;
   font-size: 18px;
-  font-weight: bold;
+  font-weight: 500;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;

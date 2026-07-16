@@ -203,7 +203,7 @@ const formatTime = (timestamp: number) => {
 
 .project-name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: #e7e7e7;
   margin-bottom: 4px;
 }

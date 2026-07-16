@@ -229,11 +229,11 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 .control-btn.close { background: #ff5f56; }
-.control-btn.close::before { content: '\00d7'; font-size: 10px; color: #4d0000; font-weight: bold; }
+.control-btn.close::before { content: '\00d7'; font-size: 10px; color: #4d0000; font-weight: 500; }
 .control-btn.minimize { background: #ffbd2e; }
-.control-btn.minimize::before { content: '\2212'; font-size: 10px; color: #995700; font-weight: bold; }
+.control-btn.minimize::before { content: '\2212'; font-size: 10px; color: #995700; font-weight: 500; }
 .control-btn.maximize { background: #27c93f; }
-.control-btn.maximize::before { content: '+'; font-size: 10px; color: #006400; font-weight: bold; }
+.control-btn.maximize::before { content: '+'; font-size: 10px; color: #006400; font-weight: 500; }
 
 .header-drag {
   flex: 1;

@@ -54,6 +54,7 @@ class XTermManager {
     const terminal = new Terminal({
       fontFamily: '"JetBrains Mono", "Courier New", monospace',
       fontSize: options.fontSize,
+      fontWeightBold: 500,
       cursorBlink: true,
       allowTransparency: true,
       theme: options.theme,
