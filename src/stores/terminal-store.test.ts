@@ -500,7 +500,11 @@ describe('terminal-store studio mode', () => {
   describe('createStudioBranch', () => {
     beforeEach(() => {
       mockInvoke.mockImplementation(async (cmd: string, args: any) => {
-        if (cmd === 'pty_spawn') return { session_id: 'sess_branch', cwd: args.cwd }
+        if (cmd === 'git_create_worktree') {
+          // Return the worktreePath that was passed in (mirror real backend behavior)
+          return args?.worktreePath ?? args?.worktree_path ?? '/repo/.materm-worktrees/fallback'
+        }
+        if (cmd === 'pty_spawn') return { session_id: 'sess_branch', cwd: args?.cwd }
         if (cmd === 'git_status' || cmd === 'git_log' || cmd === 'git_stash_list') return []
         return undefined
       })
