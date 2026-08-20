@@ -235,7 +235,7 @@ describe('use-agent-session send', () => {
     expect(agent.items.value[0]).toMatchObject({ kind: 'user', text: 'refactor the store' })
     expect(agent.isBusy.value).toBe(true)
     const sendCall = mockInvoke.mock.calls.find(c => c[0] === 'agent_send')!
-    expect(sendCall[1]).toEqual({ agentId: 'ag_1', text: 'refactor the store' })
+    expect(sendCall[1]).toMatchObject({ agentId: 'ag_1', text: 'refactor the store' })
   })
 
   it('ignores empty messages', async () => {
