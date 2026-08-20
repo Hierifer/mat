@@ -55,8 +55,11 @@ export function useSpeechRecognition(options?: SpeechRecognitionOptions) {
   let unlistenResult: UnlistenFn | null = null
   let unlistenError: UnlistenFn | null = null
 
-  // Clean up event listeners on unmount
-  onUnmounted(() => {
+  // Clean up on unmount: stop recognition and release microphone
+  onUnmounted(async () => {
+    if (isListening.value) {
+      await stop()
+    }
     if (unlistenResult) unlistenResult()
     if (unlistenError) unlistenError()
   })

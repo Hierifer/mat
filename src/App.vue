@@ -358,6 +358,11 @@ onMounted(async () => {
   window.addEventListener('keydown', handleSpeechShortcut)
   console.log('[App] Speech recognition shortcut registered (Ctrl+Shift+V)')
 
+  // Release microphone when window is closing
+  window.addEventListener('beforeunload', () => {
+    if (isListening.value) stopSpeech()
+  })
+
   // Apply initial theme mode and setup system theme listener
   terminalStore.applyThemeMode()
 
@@ -376,6 +381,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (isListening.value) stopSpeech()
   if (layoutSnapshotTimer) clearTimeout(layoutSnapshotTimer)
   if (unlistenSettings) unlistenSettings()
   if (unlistenAbout) unlistenAbout()
