@@ -10,11 +10,19 @@ export interface AgentToolCall {
   isError: boolean
 }
 
+export interface AgentAttachment {
+  path: string
+  mediaType: string
+  name: string
+  previewUrl?: string
+}
+
 export interface AgentTimelineItem {
   id: string
   kind: 'user' | 'assistant' | 'tool' | 'system' | 'result' | 'error'
   text: string
   tool?: AgentToolCall
+  attachments?: { name: string; path: string; previewUrl?: string }[]
   timestamp: number
 }
 
@@ -178,14 +186,23 @@ export function useAgentSession() {
     unlisteners.value = [unEvent, unStderr, unExit]
   }
 
-  async function send(text: string) {
+  async function send(text: string, attachments?: AgentAttachment[]) {
     const trimmed = text.trim()
-    if (!trimmed || !agentId.value || !isRunning.value) return
+    const hasAttachments = attachments && attachments.length > 0
+    if ((!trimmed && !hasAttachments) || !agentId.value || !isRunning.value) return
 
-    pushItem({ kind: 'user', text: trimmed })
-    isBusy.value = true
+    pushItem({
+      kind: 'user',
+      text: trimmed,
+      attachments: attachments?.map((a) => ({ name: a.name, path: a.path, previewUrl: a.previewUrl })),
+    })
+    if (!isBusy.value) isBusy.value = true
     try {
-      await invoke('agent_send', { agentId: agentId.value, text: trimmed })
+      await invoke('agent_send', {
+        agentId: agentId.value,
+        text: trimmed,
+        attachments: attachments?.map((a) => ({ path: a.path, media_type: a.mediaType })) ?? [],
+      })
     } catch (error) {
       isBusy.value = false
       pushItem({ kind: 'error', text: String(error) })

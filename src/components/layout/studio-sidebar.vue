@@ -4,6 +4,7 @@ import { useTerminalStore } from '@/stores/terminal-store'
 import { useI18n } from 'vue-i18n'
 import StudioGitPanel from './studio-git-panel.vue'
 import IconFont from '@/components/ui/icon-font.vue'
+import { formatTime } from '@/utils/format-time'
 
 const store = useTerminalStore()
 const { t } = useI18n()
@@ -51,6 +52,36 @@ const handleBranchInputKeydown = (e: KeyboardEvent) => {
   }
 }
 
+// Inline branch rename
+const editingBranchId = ref<string | null>(null)
+const editingBranchName = ref('')
+
+const startEditingBranch = (branch: { id: string; name: string }) => {
+  editingBranchId.value = branch.id
+  editingBranchName.value = branch.name
+}
+
+const cancelEditingBranch = () => {
+  editingBranchId.value = null
+  editingBranchName.value = ''
+}
+
+const confirmEditBranch = () => {
+  const name = editingBranchName.value.trim()
+  if (name && editingBranchId.value) {
+    store.renameStudioBranch(editingBranchId.value, name)
+  }
+  cancelEditingBranch()
+}
+
+const handleEditBranchKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter') {
+    confirmEditBranch()
+  } else if (e.key === 'Escape') {
+    cancelEditingBranch()
+  }
+}
+
 // Branch actions
 const handleBranchClick = (branchId: string) => {
   store.setActiveStudioBranch(branchId)
@@ -77,18 +108,6 @@ const handleRefresh = async () => {
   }
 }
 
-// Format relative time
-const formatTime = (timestamp: number) => {
-  const diff = Date.now() - timestamp
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
-  if (minutes < 1) return t('common.justNow')
-  if (minutes < 60) return t('common.minutesAgo', { minutes })
-  if (hours < 24) return t('common.hoursAgo', { hours })
-  return t('common.daysAgo', { days })
-}
 </script>
 
 <template>
@@ -115,7 +134,16 @@ const formatTime = (timestamp: number) => {
       >
         <icon-font class="branch-icon" name="branch" :size="14" />
         <div class="branch-info">
-          <span class="branch-name">{{ branch.name }}</span>
+          <input
+            v-if="editingBranchId === branch.id"
+            v-model="editingBranchName"
+            class="branch-name-input"
+            @keydown="handleEditBranchKeydown"
+            @blur="confirmEditBranch"
+            @click.stop
+            autofocus
+          />
+          <span v-else class="branch-name" @click.stop="startEditingBranch(branch)">{{ branch.name }}</span>
           <span class="branch-time">{{ formatTime(branch.createdAt) }}</span>
         </div>
         <button
@@ -309,6 +337,25 @@ const formatTime = (timestamp: number) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: text;
+}
+
+.branch-name-input {
+  font-size: 13px;
+  color: #e7e7e7;
+  background: #2d2d30;
+  border: 1px solid #007acc;
+  border-radius: 3px;
+  padding: 1px 4px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.light-theme .branch-name-input {
+  color: #333;
+  background: #fff;
+  border-color: #007acc;
 }
 
 .light-theme .branch-name {

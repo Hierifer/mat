@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useI18n } from 'vue-i18n'
 import IconFont from '@/components/ui/icon-font.vue'
+import { formatTime } from '@/utils/format-time'
 
 const store = useTerminalStore()
 const { t } = useI18n()
@@ -18,18 +19,6 @@ const shortenPath = (path: string) => {
   return path
     .replace(/^\/Users\/[^/]+/, '~')
     .replace(/^\/home\/[^/]+/, '~')
-}
-
-const formatTime = (timestamp: number) => {
-  const diff = Date.now() - timestamp
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
-  if (minutes < 1) return t('common.justNow')
-  if (minutes < 60) return t('common.minutesAgo', { minutes })
-  if (hours < 24) return t('common.hoursAgo', { hours })
-  return t('common.daysAgo', { days })
 }
 
 const handleRemove = (path: string, event: Event) => {

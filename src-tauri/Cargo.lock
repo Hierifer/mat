@@ -2555,6 +2555,7 @@ name = "materm"
 version = "1.5.2"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "block",
  "cocoa",
  "core-foundation 0.9.4",

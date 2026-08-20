@@ -1243,6 +1243,15 @@ export const useTerminalStore = defineStore("terminal", {
       this.refreshAllGitInfo()
     },
 
+    renameStudioBranch(branchId: string, newName: string) {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+      const branch = tab.branches.find(b => b.id === branchId)
+      if (branch) {
+        branch.name = newName
+      }
+    },
+
     setStudioBranchViewMode(branchId: string, mode: 'agent' | 'terminal') {
       const tab = this.activeStudioTab as StudioTab | undefined
       const branch = tab?.branches.find(b => b.id === branchId)

@@ -3,7 +3,7 @@ use std::time::Duration;
 use tauri::{command, AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
-use super::manager::AgentManager;
+use super::manager::{AgentAttachment, AgentManager};
 
 #[derive(serde::Serialize)]
 pub struct AgentSpawnResponse {
@@ -50,8 +50,13 @@ pub async fn agent_send(
     manager: State<'_, Arc<Mutex<AgentManager>>>,
     agent_id: String,
     text: String,
+    attachments: Option<Vec<AgentAttachment>>,
 ) -> Result<(), String> {
-    manager.lock().await.send(&agent_id, &text).await
+    manager
+        .lock()
+        .await
+        .send(&agent_id, &text, attachments.unwrap_or_default())
+        .await
 }
 
 #[command]

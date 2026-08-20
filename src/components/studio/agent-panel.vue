@@ -3,8 +3,10 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTerminalStore } from '@/stores/terminal-store'
 import MarkdownIt from 'markdown-it'
-import { useAgentSession, type AgentTimelineItem } from '@/composables/use-agent-session'
+import { useAgentSession, type AgentAttachment, type AgentTimelineItem } from '@/composables/use-agent-session'
 import IconFont from '@/components/ui/icon-font.vue'
+import { invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
 
 // html: false escapes raw HTML from the model output (XSS-safe)
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
@@ -26,6 +28,105 @@ const isLightTheme = computed(() => store.currentThemeName.includes('Light'))
 const inputText = ref('')
 const timelineRef = ref<HTMLElement | null>(null)
 const expandedTools = ref<Set<string>>(new Set())
+
+interface PendingFile {
+  path: string
+  mediaType: string
+  name: string
+  previewUrl?: string
+}
+
+const pendingFiles = ref<PendingFile[]>([])
+const isDragOver = ref(false)
+
+function mimeFromExt(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  const map: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+  }
+  return map[ext] || 'application/octet-stream'
+}
+
+function isImageMime(mime: string): boolean {
+  return mime.startsWith('image/')
+}
+
+async function addFileFromBlob(blob: Blob, mimeType: string, fileName?: string) {
+  const buf = await blob.arrayBuffer()
+  const data = Array.from(new Uint8Array(buf))
+  const path = await invoke<string>('save_clipboard_image', { data, mimeType })
+  const previewUrl = URL.createObjectURL(blob)
+  pendingFiles.value.push({
+    path,
+    mediaType: mimeType,
+    name: fileName || path.split('/').pop() || 'image',
+    previewUrl,
+  })
+}
+
+function removePendingFile(index: number) {
+  const file = pendingFiles.value[index]
+  if (file.previewUrl) URL.revokeObjectURL(file.previewUrl)
+  pendingFiles.value.splice(index, 1)
+}
+
+async function handlePaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault()
+      const blob = item.getAsFile()
+      if (blob) await addFileFromBlob(blob, item.type)
+    }
+  }
+}
+
+function handleDragOver(e: DragEvent) {
+  e.preventDefault()
+  isDragOver.value = true
+}
+
+function handleDragLeave() {
+  isDragOver.value = false
+}
+
+async function handleDrop(e: DragEvent) {
+  e.preventDefault()
+  isDragOver.value = false
+  const files = e.dataTransfer?.files
+  if (!files) return
+  for (const file of files) {
+    const mime = file.type || mimeFromExt(file.name)
+    if (isImageMime(mime)) {
+      await addFileFromBlob(file, mime, file.name)
+    }
+  }
+}
+
+async function handleFilePicker() {
+  const selected = await open({
+    multiple: true,
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] }],
+  })
+  if (!selected) return
+  const paths = Array.isArray(selected) ? selected : [selected]
+  for (const filePath of paths) {
+    const name = filePath.split('/').pop() || filePath
+    const mediaType = mimeFromExt(name)
+    // Read file bytes via Rust and create a blob URL for preview
+    let previewUrl: string | undefined
+    try {
+      const bytes = await invoke<number[]>('read_file_bytes', { path: filePath })
+      const blob = new Blob([new Uint8Array(bytes)], { type: mediaType })
+      previewUrl = URL.createObjectURL(blob)
+    } catch {
+      // Preview unavailable, still allow sending
+    }
+    pendingFiles.value.push({ path: filePath, mediaType, name, previewUrl })
+  }
+}
 
 const statusText = computed(() => {
   if (agent.exitCode.value !== null) return t('studio.agent.sessionExited')
@@ -123,9 +224,17 @@ function applySlashCommand(cmd: string) {
 
 async function handleSend() {
   const text = inputText.value.trim()
-  if (!text || agent.isBusy.value || !agent.isRunning.value) return
+  const attachments: AgentAttachment[] = pendingFiles.value.map((f) => ({
+    path: f.path,
+    mediaType: f.mediaType,
+    name: f.name,
+    previewUrl: f.previewUrl,
+  }))
+  if ((!text && attachments.length === 0) || !agent.isRunning.value) return
   inputText.value = ''
-  await agent.send(text)
+  // Don't revoke preview URLs — they're kept for display in sent message bubbles
+  pendingFiles.value = []
+  await agent.send(text, attachments.length > 0 ? attachments : undefined)
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -223,7 +332,13 @@ onUnmounted(() => {
 
         <!-- User message -->
         <div v-else-if="block.item.kind === 'user'" class="msg msg-user">
-          <div class="msg-user-bubble">{{ block.item.text }}</div>
+          <div v-if="block.item.attachments?.length" class="msg-user-attachments">
+            <div v-for="(att, i) in block.item.attachments" :key="i" class="msg-attachment-thumb">
+              <img v-if="att.previewUrl" :src="att.previewUrl" :alt="att.name" />
+              <span class="msg-attachment-name">{{ att.name }}</span>
+            </div>
+          </div>
+          <div v-if="block.item.text" class="msg-user-bubble">{{ block.item.text }}</div>
         </div>
 
         <!-- Assistant text (markdown) -->
@@ -244,7 +359,13 @@ onUnmounted(() => {
     </div>
 
     <!-- Input -->
-    <div class="agent-input-area">
+    <div
+      class="agent-input-area"
+      :class="{ 'drag-over': isDragOver }"
+      @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop="handleDrop"
+    >
       <div v-if="showSlashPopup" ref="slashPopupRef" class="slash-popup">
         <div
           v-for="(cmd, i) in slashMatches"
@@ -257,21 +378,34 @@ onUnmounted(() => {
           /{{ cmd }}
         </div>
       </div>
-      <textarea
-        v-model="inputText"
-        class="agent-input"
-        rows="2"
-        :placeholder="agent.isRunning.value ? t('studio.agent.inputPlaceholder') : t('studio.agent.sessionExited')"
-        :disabled="!agent.isRunning.value"
-        @keydown="handleKeydown"
-      />
-      <button
-        class="agent-send-btn"
-        :disabled="!inputText.trim() || agent.isBusy.value || !agent.isRunning.value"
-        @click="handleSend"
-      >
-        {{ t('studio.agent.send') }}
-      </button>
+      <!-- Pending file previews -->
+      <div v-if="pendingFiles.length > 0" class="pending-files">
+        <div v-for="(file, i) in pendingFiles" :key="file.path" class="pending-file">
+          <img v-if="file.previewUrl" :src="file.previewUrl" class="pending-thumb" :alt="file.name" />
+          <span v-else class="pending-file-icon">📎</span>
+          <span class="pending-file-name">{{ file.name }}</span>
+          <button class="pending-file-remove" @click="removePendingFile(i)">&times;</button>
+        </div>
+      </div>
+      <div class="agent-input-row">
+        <textarea
+          v-model="inputText"
+          class="agent-input"
+          rows="2"
+          :placeholder="agent.isRunning.value ? t('studio.agent.inputPlaceholder') : t('studio.agent.sessionExited')"
+          :disabled="!agent.isRunning.value"
+          @keydown="handleKeydown"
+          @paste="handlePaste"
+        />
+        <button
+          class="agent-attach-btn"
+          :title="t('studio.agent.attach', 'Attach file')"
+          :disabled="!agent.isRunning.value"
+          @click="handleFilePicker"
+        >
+          <icon-font name="add" :size="14" />
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -734,7 +868,6 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   align-items: flex-end;
-  gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid #333;
   flex-shrink: 0;
@@ -820,24 +953,161 @@ onUnmounted(() => {
   color: #333;
 }
 
-.agent-send-btn {
-  background: #0e639c;
-  border: none;
+/* Input row with attach button */
+.agent-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 1;
+}
+
+.agent-input-row .agent-input {
+  flex: 1;
+}
+
+.agent-attach-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid #3c3c3c;
   border-radius: 6px;
-  color: #fff;
+  color: #888;
   cursor: pointer;
-  font-size: 12px;
-  padding: 8px 16px;
-  transition: background 0.15s;
+  padding: 0;
   flex-shrink: 0;
 }
 
-.agent-send-btn:hover:not(:disabled) {
-  background: #1177bb;
+.agent-attach-btn:hover {
+  background: #37373d;
+  color: #fff;
 }
 
-.agent-send-btn:disabled {
+.agent-attach-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.light-theme .agent-attach-btn {
+  border-color: #ccc;
+}
+
+.light-theme .agent-attach-btn:hover {
+  background: #e0e0e0;
+  color: #000;
+}
+
+/* Drag over indicator */
+.agent-input-area.drag-over {
+  background: rgba(0, 122, 204, 0.08);
+  border-color: #007acc;
+}
+
+/* Pending files preview strip */
+.pending-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 8px;
+  width: 100%;
+}
+
+.pending-file {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  padding: 4px 8px 4px 4px;
+  font-size: 11px;
+  max-width: 180px;
+}
+
+.light-theme .pending-file {
+  background: #f0f0f0;
+  border-color: #ddd;
+}
+
+.pending-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.pending-file-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.pending-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #bbb;
+  flex: 1;
+  min-width: 0;
+}
+
+.light-theme .pending-file-name {
+  color: #555;
+}
+
+.pending-file-remove {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.pending-file-remove:hover {
+  color: #f48771;
+}
+
+/* User message attachments */
+.msg-user-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.msg-attachment-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: 80px;
+}
+
+.msg-attachment-thumb img {
+  max-height: 60px;
+  max-width: 80px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.msg-attachment-name {
+  font-size: 10px;
+  color: #aaa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80px;
+  text-align: center;
+}
+
+.light-theme .msg-attachment-name {
+  color: #777;
+}
+
 </style>

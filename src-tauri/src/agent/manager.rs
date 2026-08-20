@@ -1,9 +1,16 @@
+use base64::Engine;
 use std::collections::HashMap;
 use std::process::Stdio;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use uuid::Uuid;
+
+#[derive(serde::Deserialize, Clone)]
+pub struct AgentAttachment {
+    pub path: String,
+    pub media_type: String,
+}
 
 /// A running Claude Code headless agent process (stream-json mode).
 pub struct AgentSession {
@@ -94,18 +101,53 @@ impl AgentManager {
         Ok(agent_id)
     }
 
-    /// Send a user message (plain text) to the agent as a stream-json line.
-    pub async fn send(&mut self, agent_id: &str, text: &str) -> Result<(), String> {
+    /// Send a user message (text + optional image attachments) to the agent as a stream-json line.
+    pub async fn send(
+        &mut self,
+        agent_id: &str,
+        text: &str,
+        attachments: Vec<AgentAttachment>,
+    ) -> Result<(), String> {
         let session = self
             .sessions
             .get_mut(agent_id)
             .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
 
+        let mut content = Vec::new();
+
+        // Image blocks first
+        for att in &attachments {
+            let data = std::fs::read(&att.path)
+                .map_err(|e| format!("Failed to read attachment {}: {}", att.path, e))?;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+            content.push(serde_json::json!({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": att.media_type,
+                    "data": b64
+                }
+            }));
+        }
+
+        // Text block (if non-empty)
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            content.push(serde_json::json!({
+                "type": "text",
+                "text": trimmed
+            }));
+        }
+
+        if content.is_empty() {
+            return Ok(());
+        }
+
         let msg = serde_json::json!({
             "type": "user",
             "message": {
                 "role": "user",
-                "content": [{ "type": "text", "text": text }]
+                "content": content
             }
         });
         let mut line = msg.to_string();

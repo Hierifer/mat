@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useTerminalStore, type TmuxSessionInfo } from '@/stores/terminal-store'
 import { useI18n } from 'vue-i18n'
 import IconFont from '@/components/ui/icon-font.vue'
+import { formatTime } from '@/utils/format-time'
 
 const store = useTerminalStore()
 const { t } = useI18n()
@@ -170,20 +171,6 @@ function handleKeyDown(event: KeyboardEvent) {
       break
   }
 }
-
-// Format timestamp
-function formatTimestamp(timestamp: number): string {
-  const now = Date.now()
-  const diff = now - timestamp * 1000 // timestamp is in seconds
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
-  if (minutes < 1) return t('common.justNow', 'Just now')
-  if (minutes < 60) return t('common.minutesAgo', { minutes }, `${minutes}m ago`)
-  if (hours < 24) return t('common.hoursAgo', { hours }, `${hours}h ago`)
-  return t('common.daysAgo', { days }, `${days}d ago`)
-}
 </script>
 
 <template>
@@ -238,7 +225,7 @@ function formatTimestamp(timestamp: number): string {
             </div>
             <div class="session-meta" :style="{ color: themeColors.mutedColor }">
               {{ session.windows }} {{ $t('sessionManager.windows', 'window(s)') }} •
-              {{ formatTimestamp(session.created) }}
+              {{ formatTime(session.created, 's') }}
             </div>
           </div>
 

@@ -21,6 +21,9 @@ Thumbs.db
 !.vscode/launch.json
 .idea/
 
+# Studio worktrees
+.materm-worktrees/
+
 # Build
 dist/
 dist-ssr/

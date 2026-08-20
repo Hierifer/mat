@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useI18n } from 'vue-i18n'
 import IconFont from '@/components/ui/icon-font.vue'
+import { formatTime } from '@/utils/format-time'
 
 const store = useTerminalStore()
 const { t } = useI18n()
@@ -60,19 +61,6 @@ const handleDropStash = async (index: number) => {
   }
 }
 
-// Format relative time from unix timestamp (seconds)
-const formatRelativeTime = (timestamp: number) => {
-  if (!timestamp) return ''
-  const diff = Date.now() - timestamp * 1000
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
-  if (minutes < 1) return t('common.justNow')
-  if (minutes < 60) return t('common.minutesAgo', { minutes })
-  if (hours < 24) return t('common.hoursAgo', { hours })
-  return t('common.daysAgo', { days })
-}
 
 // Status dot color
 const statusColor = (status: string, staged: boolean): string => {
@@ -154,7 +142,7 @@ const statusColor = (status: string, staged: boolean): string => {
         <div v-else v-for="stash in store.studioGitStashes" :key="stash.index" class="stash-item">
           <div class="stash-info">
             <span class="stash-message">{{ stash.message }}</span>
-            <span class="stash-time">{{ formatRelativeTime(stash.timestamp) }}</span>
+            <span class="stash-time">{{ formatTime(stash.timestamp, 's') }}</span>
           </div>
           <div class="stash-actions">
             <button class="stash-action-btn" @click="handlePopStash(stash.index)" :title="t('studio.gitPanel.stashPop')">Pop</button>
@@ -179,7 +167,7 @@ const statusColor = (status: string, staged: boolean): string => {
         <div v-else v-for="commit in store.studioGitLog" :key="commit.hash" class="commit-item">
           <span class="commit-hash">{{ commit.short_hash }}</span>
           <span class="commit-message">{{ commit.message }}</span>
-          <span class="commit-time">{{ formatRelativeTime(commit.timestamp) }}</span>
+          <span class="commit-time">{{ formatTime(commit.timestamp, 's') }}</span>
         </div>
       </div>
     </div>
