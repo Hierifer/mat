@@ -1,6 +1,12 @@
 # Auto-generated from git history. Do not edit manually.
 # Regenerate: node scripts/generate-changelog.mjs
 
+- version: "1.5.3"
+  date: "2026-08-20"
+  features: []
+  fixes:
+    - release microphone when speech recognition is not in use
+
 - version: "1.5.2"
   date: "2026-07-17"
   features: []
@@ -72,9 +78,3 @@
   features: []
   fixes:
     - resolve cursor being pushed below status bar when running Claude Code
-
-- version: "1.2.2"
-  date: "2026-05-27"
-  features:
-    - "add What's New dialog and fix updater download progress"
-  fixes: []

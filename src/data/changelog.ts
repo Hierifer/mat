@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.5.3': {
+    date: '2026-08-20',
+    features: [],
+    fixes: [
+      'release microphone when speech recognition is not in use',
+    ],
+  },
   '1.5.2': {
     date: '2026-07-17',
     features: [],
@@ -92,12 +99,5 @@ export const changelog: Record<string, ChangelogEntry> = {
     fixes: [
       'resolve cursor being pushed below status bar when running Claude Code',
     ],
-  },
-  '1.2.2': {
-    date: '2026-05-27',
-    features: [
-      'add What\'s New dialog and fix updater download progress',
-    ],
-    fixes: [],
   },
 }
