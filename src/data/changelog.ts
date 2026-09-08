@@ -8,6 +8,17 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.6.0': {
+    date: '2026-09-08',
+    features: [
+      'persist terminal state on quit and add manual clear option',
+      'agent panel improvements, clipboard utilities, and notification enhancements',
+    ],
+    fixes: [
+      'use toMatchObject in agent session test for forward compatibility',
+      'harden createStudioBranch test mock for CI compatibility',
+    ],
+  },
   '1.5.3': {
     date: '2026-08-20',
     features: [],
@@ -92,12 +103,5 @@ export const changelog: Record<string, ChangelogEntry> = {
       'show update dialog immediately with loading state when checking',
     ],
     fixes: [],
-  },
-  '1.2.3': {
-    date: '2026-05-28',
-    features: [],
-    fixes: [
-      'resolve cursor being pushed below status bar when running Claude Code',
-    ],
   },
 }

@@ -118,6 +118,14 @@ export default {
     updateNow: '立即更新',
     restartNow: '立即重启',
     readyToRestart: '更新已安装。重启以应用新版本。',
+    progressBar: {
+      available: 'v{version} 可用',
+      download: '下载',
+      downloading: '正在下载 v{version}...',
+      ready: '更新就绪 — 重启以应用',
+      restartNow: '立即重启',
+      retry: '重试',
+    },
   },
   whatsNew: {
     title: '更新内容',

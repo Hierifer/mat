@@ -15,6 +15,7 @@ import AgentPanel from '@/components/studio/agent-panel.vue'
 import SettingsModal from '@/components/settings/settings-modal.vue'
 import AboutModal from '@/components/settings/about-modal.vue'
 import UpdateDialog from '@/components/updater/update-dialog.vue'
+import UpdateProgressBar from '@/components/updater/update-progress-bar.vue'
 import SpeechIndicator from '@/components/speech/speech-indicator.vue'
 import SessionManager from '@/components/terminal/session-manager.vue'
 import ClaudeStatusBar from '@/components/claude/claude-status-bar.vue'
@@ -26,8 +27,9 @@ import { getVersion } from '@tauri-apps/api/app'
 import { open as openDialog, ask } from '@tauri-apps/plugin-dialog'
 
 const terminalStore = useTerminalStore()
-const { updateInfo, isChecking, checkForUpdates } = useUpdater()
+const { updateInfo, isChecking, updateAvailable, checkForUpdates } = useUpdater()
 const showUpdateDialog = ref(false)
+const dismissProgressBar = ref(false)
 const showWhatsNew = ref(false)
 const { t } = useI18n()
 
@@ -324,21 +326,21 @@ onMounted(async () => {
     try {
       const hasUpdate = await checkForUpdates(true) // silent mode
       if (hasUpdate) {
-        // Mark menu badge regardless of whether we show the dialog
         await invoke('set_update_menu_badge', { hasUpdate: true })
 
         const dismissedVersion = localStorage.getItem('materm_dismissed_update_version')
         if (dismissedVersion && updateInfo.value && updateInfo.value.version === dismissedVersion) {
-          console.log('[App] Update available but version is dismissed, skipping dialog')
+          console.log('[App] Update available but version is dismissed, skipping')
         } else {
+          // Show dialog first, progress bar will appear when user starts download
           console.log('[App] Update available, showing dialog')
           showUpdateDialog.value = true
+          dismissProgressBar.value = false
           await notifyInfo(t('notifications.updateAvailable'), t('notifications.updateAvailableStartup'))
         }
       }
     } catch (error) {
       console.error('[App] Auto update check failed:', error)
-      // Silent failure for auto-check
     }
   }, 3000)
 
@@ -418,9 +420,15 @@ onUnmounted(() => {
       <!-- Project tab bar -->
       <div class="studio-project-bar" :class="{ 'light-theme': isLightTheme }">
         <div v-if="isMacOS()" class="window-controls macos">
-          <button class="control-btn close" @click="handleStudioClose"></button>
-          <button class="control-btn minimize" @click="handleStudioMinimize"></button>
-          <button class="control-btn maximize" @click="handleStudioMaximize"></button>
+          <button class="control-btn close" @click="handleStudioClose">
+            <svg viewBox="0 0 12 12" width="10" height="10"><path d="M3.172 3.172a.5.5 0 0 1 .707 0L6 5.293l2.121-2.121a.5.5 0 1 1 .707.707L6.707 6l2.121 2.121a.5.5 0 1 1-.707.707L6 6.707 3.879 8.828a.5.5 0 1 1-.707-.707L5.293 6 3.172 3.879a.5.5 0 0 1 0-.707z" fill="white"/></svg>
+          </button>
+          <button class="control-btn minimize" @click="handleStudioMinimize">
+            <svg viewBox="0 0 12 12" width="10" height="10"><rect x="2" y="5.5" width="8" height="1" rx="0.5" fill="white"/></svg>
+          </button>
+          <button class="control-btn maximize" @click="handleStudioMaximize">
+            <svg viewBox="0 0 12 12" width="10" height="10"><path d="M6 2.5a.5.5 0 0 1 .5.5v2.5H9a.5.5 0 0 1 0 1H6.5V9a.5.5 0 0 1-1 0V6.5H3a.5.5 0 0 1 0-1h2.5V3a.5.5 0 0 1 .5-.5z" fill="white"/></svg>
+          </button>
         </div>
 
         <div class="studio-tab-list">
@@ -555,6 +563,12 @@ onUnmounted(() => {
 
     <!-- Claude Status Bar -->
     <claude-status-bar />
+
+    <!-- Update Progress Bar (background download) -->
+    <update-progress-bar
+      v-if="!dismissProgressBar"
+      @dismiss="dismissProgressBar = true"
+    />
 
     <!-- Speech Recognition Indicator -->
     <speech-indicator
@@ -705,33 +719,27 @@ onUnmounted(() => {
   height: 12px;
   border-radius: 50%;
   border: none;
+  padding: 0;
   cursor: pointer;
   transition: all 0.15s;
-  position: relative;
-}
-
-.studio-project-bar .control-btn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity 0.15s;
 }
 
-.studio-project-bar:hover .control-btn::before {
+.studio-project-bar .control-btn svg {
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.studio-project-bar:hover .control-btn svg {
   opacity: 1;
 }
 
-.studio-project-bar .control-btn.close { background: #ff5f56; }
-.studio-project-bar .control-btn.close::before { content: '\00d7'; font-size: 10px; color: #4d0000; font-weight: 500; }
-.studio-project-bar .control-btn.minimize { background: #ffbd2e; }
-.studio-project-bar .control-btn.minimize::before { content: '\2212'; font-size: 10px; color: #995700; font-weight: 500; }
-.studio-project-bar .control-btn.maximize { background: #27c93f; }
-.studio-project-bar .control-btn.maximize::before { content: '+'; font-size: 10px; color: #006400; font-weight: 500; }
+.studio-project-bar .control-btn.close { background: #ff5f56; color: #4d0000; }
+.studio-project-bar .control-btn.minimize { background: #ffbd2e; color: #995700; }
+.studio-project-bar .control-btn.maximize { background: #27c93f; color: #006400; }
 
 .studio-project-bar .window-controls.windows-linux {
   display: flex;

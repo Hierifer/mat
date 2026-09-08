@@ -204,9 +204,15 @@ const handleKeydown = (e: KeyboardEvent) => {
   >
     <!-- macOS style window controls (left side) -->
     <div v-if="isMacOS()" class="window-controls macos">
-      <button class="control-btn close" @click="handleClose" title="Close"></button>
-      <button class="control-btn minimize" @click="handleMinimize" title="Minimize"></button>
-      <button class="control-btn maximize" @click="handleMaximize" title="Maximize"></button>
+      <button class="control-btn close" @click="handleClose" title="Close">
+        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M3.172 3.172a.5.5 0 0 1 .707 0L6 5.293l2.121-2.121a.5.5 0 1 1 .707.707L6.707 6l2.121 2.121a.5.5 0 1 1-.707.707L6 6.707 3.879 8.828a.5.5 0 1 1-.707-.707L5.293 6 3.172 3.879a.5.5 0 0 1 0-.707z" fill="white"/></svg>
+      </button>
+      <button class="control-btn minimize" @click="handleMinimize" title="Minimize">
+        <svg viewBox="0 0 12 12" width="10" height="10"><rect x="2" y="5.5" width="8" height="1" rx="0.5" fill="white"/></svg>
+      </button>
+      <button class="control-btn maximize" @click="handleMaximize" title="Maximize">
+        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M6 2.5a.5.5 0 0 1 .5.5v2.5H9a.5.5 0 0 1 0 1H6.5V9a.5.5 0 0 1-1 0V6.5H3a.5.5 0 0 1 0-1h2.5V3a.5.5 0 0 1 .5-.5z" fill="white"/></svg>
+      </button>
     </div>
 
     <div class="tab-list">
@@ -318,7 +324,7 @@ const handleKeydown = (e: KeyboardEvent) => {
     <div v-if="isWindows() || isLinux()" class="window-controls windows-linux">
       <button class="control-btn-win minimize" @click="handleMinimize" title="Minimize">
         <svg width="10" height="10" viewBox="0 0 10 10">
-          <rect x="0" y="4" width="10" height="1" fill="currentColor"/>
+          <rect x="0" y="4" width="10" height="1" fill="white"/>
         </svg>
       </button>
       <button class="control-btn-win maximize" @click="handleMaximize" title="Maximize">
@@ -369,59 +375,27 @@ const handleKeydown = (e: KeyboardEvent) => {
   height: 12px;
   border-radius: 50%;
   border: none;
+  padding: 0;
   cursor: pointer;
   transition: all 0.15s;
-  position: relative;
-}
-
-.control-btn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity 0.15s;
 }
 
-.window-controls.macos:hover .control-btn::before {
+.control-btn svg {
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.window-controls.macos:hover .control-btn svg {
   opacity: 1;
 }
 
-.control-btn.close {
-  background: #ff5f56;
-}
-
-.control-btn.close::before {
-  content: '×';
-  font-size: 10px;
-  color: #4d0000;
-  font-weight: 500;
-}
-
-.control-btn.minimize {
-  background: #ffbd2e;
-}
-
-.control-btn.minimize::before {
-  content: '−';
-  font-size: 10px;
-  color: #995700;
-  font-weight: 500;
-}
-
-.control-btn.maximize {
-  background: #27c93f;
-}
-
-.control-btn.maximize::before {
-  content: '+';
-  font-size: 10px;
-  color: #006400;
-  font-weight: 500;
-}
+.control-btn.close { background: #ff5f56; color: #4d0000; }
+.control-btn.minimize { background: #ffbd2e; color: #995700; }
+.control-btn.maximize { background: #27c93f; color: #006400; }
 
 /* Windows/Linux style controls */
 .window-controls.windows-linux {

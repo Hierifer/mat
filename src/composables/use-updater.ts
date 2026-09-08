@@ -10,16 +10,18 @@ export interface UpdateInfo {
   body?: string
 }
 
-export function useUpdater() {
-  const updateAvailable = ref(false)
-  const updateInfo = ref<UpdateInfo | null>(null)
-  const isChecking = ref(false)
-  const isDownloading = ref(false)
-  const isReadyToRestart = ref(false)
-  const downloadProgress = ref(0)
-  const error = ref<string | null>(null)
+// Singleton state — shared across all consumers
+const updateAvailable = ref(false)
+const updateInfo = ref<UpdateInfo | null>(null)
+const isChecking = ref(false)
+const isDownloading = ref(false)
+const isReadyToRestart = ref(false)
+const downloadProgress = ref(0)
+const error = ref<string | null>(null)
 
-  let pendingUpdate: Update | null = null
+let pendingUpdate: Update | null = null
+
+export function useUpdater() {
 
   const checkForUpdates = async (silent = false): Promise<boolean> => {
     console.log('[Updater] ========================================')

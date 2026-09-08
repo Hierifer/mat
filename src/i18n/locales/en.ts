@@ -118,6 +118,14 @@ export default {
     updateNow: 'Update Now',
     restartNow: 'Restart Now',
     readyToRestart: 'Update installed. Restart to apply the new version.',
+    progressBar: {
+      available: 'v{version} available',
+      download: 'Download',
+      downloading: 'Downloading v{version}...',
+      ready: 'Update ready — restart to apply',
+      restartNow: 'Restart Now',
+      retry: 'Retry',
+    },
   },
   whatsNew: {
     title: "What's New",
