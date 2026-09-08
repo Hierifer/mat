@@ -11,6 +11,7 @@ export const changelog: Record<string, ChangelogEntry> = {
   '1.6.0': {
     date: '2026-09-08',
     features: [
+      'non-blocking update progress bar and SVG window control icons',
       'persist terminal state on quit and add manual clear option',
       'agent panel improvements, clipboard utilities, and notification enhancements',
     ],
