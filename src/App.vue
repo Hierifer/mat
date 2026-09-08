@@ -358,8 +358,9 @@ onMounted(async () => {
   window.addEventListener('keydown', handleSpeechShortcut)
   console.log('[App] Speech recognition shortcut registered (Ctrl+Shift+V)')
 
-  // Release microphone when window is closing
+  // Save terminal state and release microphone when window is closing
   window.addEventListener('beforeunload', () => {
+    terminalStore.saveTerminalState()
     if (isListening.value) stopSpeech()
   })
 

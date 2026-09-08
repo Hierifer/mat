@@ -31,6 +31,12 @@ export default {
       enableDesc: 'Use tmux for session persistence and unlimited scrollback; previous terminal layout and sessions are restored automatically on restart',
       manageSession: 'Manage tmux Sessions',
     },
+    sessionRestore: {
+      title: 'Session Restore',
+      clearSavedState: 'Clear Saved Session State',
+      clearSavedStateDesc: 'Clears saved terminal layout and content so the next launch starts fresh',
+      cleared: 'Cleared',
+    },
     speech: {
       title: 'Speech Recognition',
       provider: 'Recognition Engine',

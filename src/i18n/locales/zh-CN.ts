@@ -31,6 +31,12 @@ export default {
       enableDesc: '使用 tmux 实现会话持久化和无限回滚，重启应用时自动恢复之前的终端布局与会话',
       manageSession: '管理 tmux 会话',
     },
+    sessionRestore: {
+      title: '会话恢复',
+      clearSavedState: '清除已保存的会话状态',
+      clearSavedStateDesc: '清除后下次启动将不再恢复之前的终端布局和内容',
+      cleared: '已清除',
+    },
     speech: {
       title: '语音识别',
       provider: '识别引擎',

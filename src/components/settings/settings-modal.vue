@@ -10,6 +10,13 @@ const store = useTerminalStore()
 const { locale, t } = useI18n()
 const activeCategory = ref('Appearance')
 const speechSaveStatus = ref('')
+const clearStateStatus = ref('')
+
+const clearSavedState = () => {
+  store.clearSavedTerminalState()
+  clearStateStatus.value = t('settings.sessionRestore.cleared')
+  setTimeout(() => { clearStateStatus.value = '' }, 3000)
+}
 
 const saveSpeechSettings = async () => {
   await store.saveSpeechSettings()
@@ -326,6 +333,28 @@ const themeColors = computed(() => {
             >
               {{ $t('settings.tmux.manageSession', '管理 tmux 会话') }}
             </button>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.sessionRestore.title') }}</label>
+            <p class="setting-description" :style="{ color: themeColors.descColor, paddingLeft: 0, marginBottom: '12px' }">
+              {{ $t('settings.sessionRestore.clearSavedStateDesc') }}
+            </p>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <button
+                @click="clearSavedState"
+                class="font-reset-btn"
+                :style="{
+                  background: themeColors.buttonBg,
+                  borderColor: themeColors.buttonBorder,
+                  color: themeColors.inputColor,
+                  marginLeft: 0,
+                }"
+              >
+                {{ $t('settings.sessionRestore.clearSavedState') }}
+              </button>
+              <span v-if="clearStateStatus" style="font-size: 12px; color: #52c41a;">{{ clearStateStatus }}</span>
+            </div>
           </div>
 
           <div class="setting-item">
