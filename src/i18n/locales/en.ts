@@ -25,6 +25,8 @@ export default {
     themeModeAuto: 'Auto (Follow System)',
     themeModeLight: 'Light',
     themeModeDark: 'Dark',
+    xtermPoolSize: 'Terminal Pre-warm Pool',
+    xtermPoolSizeDesc: 'Pre-create terminal instances for faster new tab opening (0 to disable)',
     tmux: {
       title: 'tmux Integration',
       enable: 'Enable tmux session management',

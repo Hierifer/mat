@@ -19,6 +19,14 @@ export interface ManagedTerminal {
   outputBuffer: ReturnType<typeof useOutputBuffer>
 }
 
+export interface PrewarmedTerminal {
+  terminal: Terminal
+  fitAddon: FitAddon
+  webLinksAddon: WebLinksAddon
+  searchAddon: SearchAddon
+  serializeAddon: SerializeAddon
+}
+
 interface TerminalEntry {
   managed: ManagedTerminal
   resizeObserver: ResizeObserver | null
@@ -36,29 +44,45 @@ interface TerminalEntry {
  */
 class XTermManager {
   private entries = new Map<string, TerminalEntry>()
+  private pool: PrewarmedTerminal[] = []
+  private _poolSize = 0
+
+  get poolSize(): number {
+    return this._poolSize
+  }
 
   /**
-   * Create and register a managed terminal with standard addons.
-   * If the paneId already exists, the old one is recycled first.
+   * Set the pool size and warm up or trim as needed.
    */
-  create(
-    paneId: string,
-    container: HTMLElement,
-    options: TerminalCreateOptions,
-  ): ManagedTerminal {
-    if (this.entries.has(paneId)) {
-      console.warn(`[XTermManager] Terminal ${paneId} already exists, recycling first`)
-      this.recycle(paneId)
-    }
+  setPoolSize(n: number): void {
+    this._poolSize = Math.max(0, Math.min(5, n))
+    this.warmPool()
+  }
 
+  /**
+   * Fill pool up to poolSize by creating Terminal instances with addons
+   * loaded but NOT calling terminal.open() (that requires a container).
+   */
+  private warmPool(): void {
+    // Trim excess
+    while (this.pool.length > this._poolSize) {
+      const entry = this.pool.pop()!
+      entry.terminal.dispose()
+    }
+    // Fill up
+    while (this.pool.length < this._poolSize) {
+      this.pool.push(this.createPrewarmed())
+    }
+  }
+
+  private createPrewarmed(): PrewarmedTerminal {
     const terminal = new Terminal({
       fontFamily: '"JetBrains Mono", "Courier New", monospace',
-      fontSize: options.fontSize,
+      fontSize: 13,
       fontWeightBold: 500,
       cursorBlink: true,
       allowTransparency: true,
-      theme: options.theme,
-      scrollback: options.scrollback ?? 3000,
+      scrollback: 3000,
       fastScrollModifier: 'shift',
       fastScrollSensitivity: 5,
       windowsMode: false,
@@ -73,7 +97,76 @@ class XTermManager {
     terminal.loadAddon(webLinksAddon)
     terminal.loadAddon(searchAddon)
     terminal.loadAddon(serializeAddon)
-    terminal.open(container)
+
+    return { terminal, fitAddon, webLinksAddon, searchAddon, serializeAddon }
+  }
+
+  /**
+   * Asynchronously replenish the pool after consuming a pre-warmed terminal.
+   */
+  private replenish(): void {
+    queueMicrotask(() => this.warmPool())
+  }
+
+  /**
+   * Create and register a managed terminal with standard addons.
+   * If the paneId already exists, the old one is recycled first.
+   * Uses a pre-warmed terminal from the pool when available.
+   */
+  create(
+    paneId: string,
+    container: HTMLElement,
+    options: TerminalCreateOptions,
+  ): ManagedTerminal {
+    if (this.entries.has(paneId)) {
+      console.warn(`[XTermManager] Terminal ${paneId} already exists, recycling first`)
+      this.recycle(paneId)
+    }
+
+    let terminal: Terminal
+    let fitAddon: FitAddon
+    let searchAddon: SearchAddon
+    let serializeAddon: SerializeAddon
+
+    if (this.pool.length > 0) {
+      const prewarmed = this.pool.pop()!
+      terminal = prewarmed.terminal
+      fitAddon = prewarmed.fitAddon
+      searchAddon = prewarmed.searchAddon
+      serializeAddon = prewarmed.serializeAddon
+
+      // Apply caller's options to the pre-warmed terminal
+      terminal.options.fontSize = options.fontSize
+      terminal.options.theme = options.theme
+      terminal.options.scrollback = options.scrollback ?? 3000
+
+      terminal.open(container)
+      this.replenish()
+    } else {
+      terminal = new Terminal({
+        fontFamily: '"JetBrains Mono", "Courier New", monospace',
+        fontSize: options.fontSize,
+        fontWeightBold: 500,
+        cursorBlink: true,
+        allowTransparency: true,
+        theme: options.theme,
+        scrollback: options.scrollback ?? 3000,
+        fastScrollModifier: 'shift',
+        fastScrollSensitivity: 5,
+        windowsMode: false,
+      })
+
+      fitAddon = new FitAddon()
+      const webLinksAddon = new WebLinksAddon()
+      searchAddon = new SearchAddon()
+      serializeAddon = new SerializeAddon()
+
+      terminal.loadAddon(fitAddon)
+      terminal.loadAddon(webLinksAddon)
+      terminal.loadAddon(searchAddon)
+      terminal.loadAddon(serializeAddon)
+      terminal.open(container)
+    }
 
     const outputBuffer = useOutputBuffer(terminal, {
       batchInterval: 32,
@@ -232,6 +325,16 @@ class XTermManager {
     for (const paneId of paneIds) {
       this.recycle(paneId)
     }
+  }
+
+  /**
+   * Dispose all pre-warmed terminals in the pool.
+   */
+  disposePool(): void {
+    for (const entry of this.pool) {
+      entry.terminal.dispose()
+    }
+    this.pool.length = 0
   }
 
   /**

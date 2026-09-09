@@ -25,6 +25,8 @@ export default {
     themeModeAuto: '自动（跟随系统）',
     themeModeLight: '浅色',
     themeModeDark: '深色',
+    xtermPoolSize: '终端预热缓存池',
+    xtermPoolSizeDesc: '预创建的终端实例数量，加快新标签页打开速度（0 为禁用）',
     tmux: {
       title: 'tmux 集成',
       enable: '启用 tmux 会话管理',

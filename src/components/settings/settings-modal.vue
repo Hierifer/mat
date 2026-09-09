@@ -304,6 +304,26 @@ const themeColors = computed(() => {
           </div>
 
           <div class="setting-item">
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.xtermPoolSize') }}</label>
+            <p class="setting-description" :style="{ color: themeColors.descColor, paddingLeft: 0, marginBottom: '15px' }">
+              {{ $t('settings.xtermPoolSizeDesc') }}
+            </p>
+            <div class="font-size-controls">
+              <button @click="store.setXtermPoolSize(store.xtermPoolSize - 1)" class="font-btn" :style="{
+                background: themeColors.buttonBg,
+                borderColor: themeColors.buttonBorder,
+                color: themeColors.inputColor
+              }">-</button>
+              <span class="font-size-value" :style="{ color: themeColors.labelColor }">{{ store.xtermPoolSize }}</span>
+              <button @click="store.setXtermPoolSize(store.xtermPoolSize + 1)" class="font-btn" :style="{
+                background: themeColors.buttonBg,
+                borderColor: themeColors.buttonBorder,
+                color: themeColors.inputColor
+              }">+</button>
+            </div>
+          </div>
+
+          <div class="setting-item">
             <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.tmux.title', 'tmux 集成') }}</label>
             <div class="setting-row">
               <label class="checkbox-label">

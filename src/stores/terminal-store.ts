@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { themes, type ITheme } from "@/settings/themes";
 import { SerializeAddon } from '@xterm/addon-serialize'
-import { getAllTerminals } from '@/composables/xterm-manager'
+import { getAllTerminals, xtermManager } from '@/composables/xterm-manager'
 
 const SAVED_STATE_KEY = 'materm_terminal_state'
 const TMUX_LAYOUT_KEY = 'materm_tmux_layout'
@@ -184,6 +184,8 @@ export const useTerminalStore = defineStore("terminal", {
     // TTS (voice announcements) settings
     enableVoiceAnnouncements: false,
     ttsVoice: 'longxiaochun' as string,
+    // xterm pool size (pre-warmed terminal instances)
+    xtermPoolSize: 1 as number,
     // Transient: saved pane contents during restore (not persisted)
     _savedPaneContents: null as Record<string, string> | null,
     // Tab notifications (breathing red dot for completed Claude tasks)
@@ -272,6 +274,11 @@ export const useTerminalStore = defineStore("terminal", {
 
     resetFontSize() {
       this.setFontSize(13);
+    },
+
+    setXtermPoolSize(size: number) {
+      this.xtermPoolSize = Math.max(0, Math.min(5, size));
+      xtermManager.setPoolSize(this.xtermPoolSize);
     },
 
     setLocale(locale: string) {
@@ -446,9 +453,25 @@ export const useTerminalStore = defineStore("terminal", {
 
       const tab = this.tabs.find((t) => t.id === tabId);
       if (tab) {
+        // Focus the first pane of this tab
+        const firstPane = this.getFirstPaneId(tab.layout);
+        if (firstPane) {
+          this.activePaneId = firstPane;
+        }
         // Fire-and-forget: don't block UI for IPC
         this.syncWindowTitle(tab.title);
       }
+    },
+
+    getFirstPaneId(node: SplitNode): string | null {
+      if (node.type === 'pane') return node.paneId ?? null;
+      if (node.children) {
+        for (const child of node.children) {
+          const found = this.getFirstPaneId(child);
+          if (found) return found;
+        }
+      }
+      return null;
     },
 
     updateTabTitle(tabId: string, title: string, manual = false) {
@@ -626,6 +649,9 @@ export const useTerminalStore = defineStore("terminal", {
 
     async initTmux() {
       try {
+        // Warm up the xterm terminal pool
+        xtermManager.setPoolSize(this.xtermPoolSize);
+
         // @ts-ignore
         if (!window.__TAURI_INTERNALS__) return;
 
