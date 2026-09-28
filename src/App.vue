@@ -201,6 +201,7 @@ const handleCloseProject = async (tabId: string) => {
 // Persist tab/split layout (debounced) so tmux sessions can be reattached
 // into the same layout after restart
 let layoutSnapshotTimer: ReturnType<typeof setTimeout> | null = null
+let stateAutoSaveTimer: ReturnType<typeof setInterval> | null = null
 watch(
   [() => terminalStore.tabs, () => terminalStore.activeTabId, () => terminalStore.activePaneId],
   () => {
@@ -234,17 +235,19 @@ onMounted(async () => {
 
   // Create initial tab or restore sessions
   try {
-    // Check if there's saved terminal state from an update
-    if (terminalStore.hasSavedTerminalState()) {
+    if (terminalStore.tmuxEnabled) {
+      // Tmux sessions survive system restarts, so prefer reattaching to live sessions
+      console.log('Restoring tmux sessions...')
+      terminalStore.clearSavedTerminalState()
+      await terminalStore.restoreSessions()
+    } else if (terminalStore.hasSavedTerminalState()) {
+      // Restore from auto-saved or beforeunload-saved terminal state
       console.log('Restoring terminal state from previous session...')
       const restored = await terminalStore.restoreTerminalState()
       if (!restored) {
         console.warn('State restore failed, creating fresh tab')
         await terminalStore.createTab()
       }
-    } else if (terminalStore.tmuxEnabled) {
-      console.log('Restoring tmux sessions...')
-      await terminalStore.restoreSessions()
     } else {
       console.log('Creating initial tab...')
       await terminalStore.createTab()
@@ -366,6 +369,14 @@ onMounted(async () => {
     if (isListening.value) stopSpeech()
   })
 
+  // Periodically auto-save terminal state so it survives system restarts
+  // (beforeunload does not fire when the OS force-kills the process)
+  stateAutoSaveTimer = setInterval(() => {
+    if (terminalStore.tabs.length > 0) {
+      terminalStore.saveTerminalState()
+    }
+  }, 30_000)
+
   // Apply initial theme mode and setup system theme listener
   terminalStore.applyThemeMode()
 
@@ -386,6 +397,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (isListening.value) stopSpeech()
   if (layoutSnapshotTimer) clearTimeout(layoutSnapshotTimer)
+  if (stateAutoSaveTimer) clearInterval(stateAutoSaveTimer)
   if (unlistenSettings) unlistenSettings()
   if (unlistenAbout) unlistenAbout()
   if (unlistenCheckUpdates) unlistenCheckUpdates()
