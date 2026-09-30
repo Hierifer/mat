@@ -1,6 +1,12 @@
 # Auto-generated from git history. Do not edit manually.
 # Regenerate: node scripts/generate-changelog.mjs
 
+- version: "1.7.0"
+  date: "2026-09-30"
+  features:
+    - "Studio mode enhancements — SQLite chat persistence, agent panel improvements, notifications"
+  fixes: []
+
 - version: "1.6.2"
   date: "2026-09-30"
   features:
@@ -77,9 +83,3 @@
     - add inactive pane brightness slider in settings
   fixes:
     - move new tab button next to tab list
-
-- version: "1.2.5"
-  date: "2026-05-29"
-  features: []
-  fixes:
-    - pane active border not triggering when clicking terminal content

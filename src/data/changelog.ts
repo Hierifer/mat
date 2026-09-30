@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.7.0': {
+    date: '2026-09-30',
+    features: [
+      'Studio mode enhancements — SQLite chat persistence, agent panel improvements, notifications',
+    ],
+    fixes: [],
+  },
   '1.6.2': {
     date: '2026-09-30',
     features: [
@@ -98,13 +105,6 @@ export const changelog: Record<string, ChangelogEntry> = {
     ],
     fixes: [
       'move new tab button next to tab list',
-    ],
-  },
-  '1.2.5': {
-    date: '2026-05-29',
-    features: [],
-    fixes: [
-      'pane active border not triggering when clicking terminal content',
     ],
   },
 }
