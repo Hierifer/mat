@@ -8,6 +8,15 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.6.2': {
+    date: '2026-09-30',
+    features: [
+      'xterm terminal pre-warm pool for faster tab creation',
+    ],
+    fixes: [
+      'restore terminal windows after system restart',
+    ],
+  },
   '1.6.0': {
     date: '2026-09-08',
     features: [
@@ -97,12 +106,5 @@ export const changelog: Record<string, ChangelogEntry> = {
     fixes: [
       'pane active border not triggering when clicking terminal content',
     ],
-  },
-  '1.2.4': {
-    date: '2026-05-28',
-    features: [
-      'show update dialog immediately with loading state when checking',
-    ],
-    fixes: [],
   },
 }
