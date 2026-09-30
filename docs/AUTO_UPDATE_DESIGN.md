@@ -1,546 +1,284 @@
-# Mat Terminal - 自动更新功能设计方案
+# Materm Auto-Update Spec
 
-## 📋 设计目标
+## 概述
 
-为 Mat 终端模拟器实现安全、可靠、用户友好的自动更新系统，支持：
-- 自动检测新版本
-- 安全的更新包下载和验证
-- 平滑的用户体验
-- 跨平台支持（macOS、Windows、Linux）
+Materm 使用 Tauri v2 官方 `tauri-plugin-updater` 实现自动更新，更新源为 GitHub Releases，通过 Ed25519 签名验证安全性。
 
-## 🏗️ 技术方案
+---
 
-### 1. 核心技术栈
+## 技术栈
 
-- **更新插件**: `tauri-plugin-updater` (Tauri v2 官方插件)
-- **更新源**: GitHub Releases
-- **签名验证**: Ed25519 数字签名
-- **更新清单**: JSON 格式的版本信息文件
+| 组件 | 技术 |
+|------|------|
+| 更新插件 | `tauri-plugin-updater` v2.10.0 (Rust + JS) |
+| 更新源 | GitHub Releases `latest.json` |
+| 签名验证 | Ed25519 (公钥内嵌 `tauri.conf.json`) |
+| 前端框架 | Vue 3 Composable 单例模式 |
+| 构建产物 | `createUpdaterArtifacts: true` 自动生成 |
 
-### 2. 架构设计
+---
+
+## 架构
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Mat Application                       │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────┐         ┌─────────────────┐          │
-│  │   Startup    │────────>│ Check for       │          │
-│  │   Hook       │         │ Updates         │          │
-│  └──────────────┘         └────────┬────────┘          │
-│                                    │                     │
-│                                    ▼                     │
-│                          ┌─────────────────┐            │
-│                          │ GitHub Releases │            │
-│                          │  (latest.json)  │            │
-│                          └────────┬────────┘            │
-│                                    │                     │
-│                          ┌─────────▼────────┐           │
-│                          │ Version Compare  │           │
-│                          └────────┬─────────┘           │
-│                                   │                      │
-│                    ┌──────────────┴───────────────┐     │
-│                    │                              │     │
-│              ┌─────▼──────┐              ┌───────▼────┐│
-│              │ No Update  │              │ New Version││
-│              │  Available │              │  Available ││
-│              └────────────┘              └──────┬─────┘│
-│                                                  │      │
-│                                         ┌────────▼─────┐│
-│                                         │ Show Update  ││
-│                                         │   Dialog     ││
-│                                         └──────┬───────┘│
-│                                                │        │
-│                                    ┌───────────┴────┐  │
-│                                    │                │  │
-│                            ┌───────▼─────┐  ┌──────▼──┐│
-│                            │   Skip      │  │Download ││
-│                            │   Update    │  │  Update ││
-│                            └─────────────┘  └────┬────┘│
-│                                                   │     │
-│                                          ┌────────▼────┐│
-│                                          │   Verify    ││
-│                                          │  Signature  ││
-│                                          └──────┬──────┘│
-│                                                 │       │
-│                                          ┌──────▼──────┐│
-│                                          │   Install   ││
-│                                          │   & Restart ││
-│                                          └─────────────┘│
-└─────────────────────────────────────────────────────────┘
+┌─ Rust Backend ──────────────────────────────────────┐
+│  lib.rs                                              │
+│  ├─ tauri_plugin_updater 注册                        │
+│  ├─ set_update_menu_badge() — 菜单角标 ●             │
+│  └─ menu event "check_updates" → emit 到前端         │
+└──────────────────────────────────────────────────────┘
+         │ event: "menu:check-updates"
+         ▼
+┌─ Frontend ───────────────────────────────────────────┐
+│                                                       │
+│  composables/use-updater.ts  (单例状态)               │
+│  ├─ checkForUpdates(silent)                           │
+│  │   └─ check() → 比较 remote vs getVersion()        │
+│  ├─ downloadAndInstall()                              │
+│  │   └─ pendingUpdate.downloadAndInstall(callback)    │
+│  ├─ restartApp()                                      │
+│  │   └─ saveTerminalState() → relaunch()             │
+│  └─ reset()                                           │
+│                                                       │
+│  components/updater/                                  │
+│  ├─ update-dialog.vue      — 全屏模态弹窗             │
+│  └─ update-progress-bar.vue — 窗口底部进度条          │
+│                                                       │
+│  App.vue                                              │
+│  ├─ onMounted → 3s 后 silent checkForUpdates          │
+│  ├─ listen("menu:check-updates") → 非 silent 检查     │
+│  ├─ dismissed version 记忆 (localStorage)             │
+│  └─ What's New 版本变化检测                           │
+└───────────────────────────────────────────────────────┘
 ```
 
-## 📦 实现步骤
+---
 
-### Phase 1: 基础配置 (Day 1)
+## 状态管理 (use-updater.ts)
 
-#### 1.1 生成签名密钥对
-```bash
-# 生成密钥对
-pnpm tauri signer generate -w ~/.tauri/mat.key
+单例 ref，所有 `useUpdater()` 消费者共享同一份状态：
 
-# 输出：
-# - 私钥: ~/.tauri/mat.key (用于签名，保密)
-# - 公钥: 配置在 tauri.conf.json (用于验证)
+| 状态 | 类型 | 说明 |
+|------|------|------|
+| `updateAvailable` | `boolean` | 是否有可用更新 |
+| `updateInfo` | `UpdateInfo \| null` | 版本号、日期、release notes |
+| `isChecking` | `boolean` | 正在检查中 |
+| `isDownloading` | `boolean` | 正在下载中 |
+| `isReadyToRestart` | `boolean` | 下载完成，等待重启 |
+| `downloadProgress` | `number` | 下载进度 0–100 |
+| `error` | `string \| null` | 错误信息 |
+
+内部变量 `pendingUpdate: Update | null` 缓存 check() 返回的 Update 对象，避免重复请求。
+
+---
+
+## 更新流程
+
+### 1. 启动自动检查
+
+```
+App mounted
+  → 延迟 3s
+  → checkForUpdates(silent=true)
+  → 如果有更新:
+      → set_update_menu_badge(true)  // 菜单角标
+      → 检查 localStorage dismissed version
+      → 如未 dismiss → showUpdateDialog = true
+  → 如果无更新或出错: 静默忽略
 ```
 
-#### 1.2 安装依赖
-```bash
-# 添加 updater 插件
-cd frontend/src-tauri
-cargo add tauri-plugin-updater
+### 2. 手动检查 (菜单)
+
+```
+用户点击 "Check for Updates..."
+  → Rust emit "menu:check-updates"
+  → 前端 listen → showUpdateDialog = true (立即显示 loading)
+  → checkForUpdates(silent=false)
+  → 如果有更新 → dialog 显示版本信息
+  → 如果无更新 → dialog 显示 "已是最新版本"
+  → 如果出错 → dialog 显示错误信息
 ```
 
-#### 1.3 配置 tauri.conf.json
+### 3. 下载安装
+
+```
+用户点击 "Update Now"
+  → downloadAndInstall()
+  → 回调事件: Started → Progress → Finished
+  → 进度通过 downloadProgress 实时更新
+  → 完成后 isReadyToRestart = true
+  → 用户点击 "Restart Now"
+  → saveTerminalState() + relaunch()
+```
+
+---
+
+## UI 组件
+
+### update-dialog.vue (模态弹窗)
+
+全屏遮罩 + 居中 500px 对话框，状态驱动显示：
+
+| 状态 | 显示内容 |
+|------|----------|
+| `isChecking` | Spinner + "正在检查..." |
+| `!updateInfo` | 绿色勾 + "已是最新版本" |
+| `updateInfo` 存在 | 版本号、日期、release notes (v-html) |
+| `isDownloading` | 进度条 + 百分比 |
+| `isReadyToRestart` | 绿色提示 + "Restart Now" 按钮 |
+| `error` | 红色错误信息 |
+
+按钮:
+- **Dismiss Version** — 记录到 localStorage，该版本不再提醒
+- **Update Now** — 开始下载
+- **Restart Now** — 下载完成后出现
+
+### update-progress-bar.vue (底部进度条)
+
+固定在窗口底部 (position: fixed, bottom: 0)，高 32px，z-index 600。
+使用 `<transition name="progress-slide">` 滑入/滑出动画。
+
+| 状态 | 显示 |
+|------|------|
+| 有更新未下载 | 蓝色文字 "vX.Y.Z available" + Download 按钮 |
+| 下载中 | 顶部 2px 进度线 + 百分比文字 |
+| 下载完成 | 绿色进度线 + "Restart Now" 按钮 |
+| 出错 | 红色错误文字 + "Retry" 按钮 |
+
+---
+
+## localStorage 键
+
+| Key | 用途 |
+|-----|------|
+| `materm_dismissed_update_version` | 用户选择忽略的版本号 |
+| `materm_last_seen_version` | What's New 上次展示的版本 |
+
+---
+
+## 配置
+
+### tauri.conf.json
+
 ```json
 {
-  "bundle": {
-    "active": true,
-    "createUpdaterArtifacts": true,
+  "plugins": {
     "updater": {
       "active": true,
       "endpoints": [
         "https://github.com/Hierifer/mat/releases/latest/download/latest.json"
       ],
-      "dialog": false,
-      "pubkey": "YOUR_PUBLIC_KEY_HERE"
+      "pubkey": "<Ed25519 公钥>"
     }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true
   }
 }
 ```
 
-#### 1.4 配置权限 (capabilities)
-```json
-// src-tauri/capabilities/default.json
-{
-  "permissions": [
-    "updater:default",
-    "updater:allow-check",
-    "updater:allow-download",
-    "updater:allow-install"
-  ]
-}
+### CI (release.yml)
+
+- 触发条件: push `v*` tag
+- 版本同步: 从 tag 自动写入 `package.json` / `Cargo.toml` / `tauri.conf.json`
+- 构建: `tauri-apps/tauri-action@v0` 生成 updater artifacts + 签名
+- 输出: `latest.json` 上传到 GitHub Release
+
+---
+
+## 已知问题
+
+### BUG-1: 启动时自动检查可能不生效
+
+当 `tauri.conf.json` 中版本号与实际发布版本不一致时（当前 1.3.2 vs 实际 1.6.0），`check()` 返回的 remote version 可能与 `getVersion()` 匹配导致跳过更新。CI 构建时会从 tag 同步版本号，但本地开发和非 CI 构建场景下版本可能不匹配。
+
+### BUG-2: 进度条显隐震荡
+
+`update-progress-bar.vue` 的可见性由 `v-if="updateAvailable || isDownloading || isReadyToRestart || error"` 控制。当 `isDownloading` 在 `downloadAndInstall()` 的 finally 块中被设为 false、而 `isReadyToRestart` 还未被设为 true 之间存在一个短暂的间隙，所有条件都为 false，导致进度条先消失再出现（震荡）。
+
+**修复方向**: 确保状态切换是原子的 — 在设置 `isReadyToRestart = true` 之后再设置 `isDownloading = false`，或使用一个统一的 phase 状态机替代多个独立 boolean。
+
+### BUG-3: Dialog 缺少"后台更新"选项
+
+当前 dialog 点击 "Update Now" 后，下载进度在 dialog 内部显示，用户必须保持 dialog 打开才能看到进度。没有办法把下载放到后台、关闭 dialog、仅在底部进度条显示进度、下载完成后再弹出提示。
+
+---
+
+## 改进计划
+
+### 1. 后台更新模式
+
+Dialog 增加"后台更新"按钮，点击后:
+1. 关闭 dialog
+2. 调用 `downloadAndInstall()` 在后台下载
+3. 底部 `update-progress-bar` 显示下载进度
+4. 下载完成后重新弹出 dialog 提示重启
+
+```
+用户看到更新 dialog
+  ├─ 点击 "Update Now" → dialog 内显示进度（当前行为）
+  └─ 点击 "Background Update" → 关闭 dialog
+       → 底部进度条显示下载进度
+       → 下载完成 → 自动弹出 dialog（仅显示 "Restart Now"）
 ```
 
-### Phase 2: 后端实现 (Day 2)
+需要的状态变化:
+- `use-updater.ts`: 无需改动，状态已是全局单例
+- `update-dialog.vue`: 增加 "Background Update" 按钮，emit 新事件
+- `update-progress-bar.vue`: 已有下载进度展示能力，无需改动
+- `App.vue`: 监听 `isReadyToRestart`，当后台下载完成时自动打开 dialog
 
-#### 2.1 集成 Updater 插件
-```rust
-// src-tauri/src/lib.rs
-use tauri_plugin_updater::UpdaterExt;
+### 2. 修复进度条震荡
 
-pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        // ... 其他配置
-}
-```
-
-#### 2.2 创建更新检查命令
-```rust
-// src-tauri/src/updater/mod.rs
-use tauri::{Manager, AppHandle};
-use tauri_plugin_updater::UpdaterExt;
-
-#[tauri::command]
-pub async fn check_for_updates(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
-    match app.updater().check().await {
-        Ok(Some(update)) => {
-            Ok(Some(UpdateInfo {
-                version: update.version,
-                date: update.date,
-                body: update.body,
-            }))
-        }
-        Ok(None) => Ok(None),
-        Err(e) => Err(format!("Failed to check for updates: {}", e)),
-    }
-}
-
-#[derive(serde::Serialize)]
-pub struct UpdateInfo {
-    pub version: String,
-    pub date: Option<String>,
-    pub body: Option<String>,
-}
-```
-
-### Phase 3: 前端实现 (Day 3)
-
-#### 3.1 创建更新管理 Composable
-```typescript
-// src/composables/use-updater.ts
-import { ref } from 'vue'
-import { check } from '@tauri-apps/plugin-updater'
-import { relaunch } from '@tauri-apps/plugin-process'
-
-export interface UpdateInfo {
-  version: string
-  date?: string
-  body?: string
-}
-
-export function useUpdater() {
-  const isChecking = ref(false)
-  const isDownloading = ref(false)
-  const updateAvailable = ref(false)
-  const updateInfo = ref<UpdateInfo | null>(null)
-  const downloadProgress = ref(0)
-
-  const checkForUpdates = async (showNoUpdateMessage = false) => {
-    isChecking.value = true
-    try {
-      const update = await check()
-
-      if (update) {
-        updateAvailable.value = true
-        updateInfo.value = {
-          version: update.version,
-          date: update.date,
-          body: update.body,
-        }
-        return true
-      } else {
-        if (showNoUpdateMessage) {
-          // 显示"已是最新版本"提示
-        }
-        return false
-      }
-    } catch (error) {
-      console.error('Failed to check for updates:', error)
-      throw error
-    } finally {
-      isChecking.value = false
-    }
-  }
-
-  const downloadAndInstall = async () => {
-    if (!updateInfo.value) return
-
-    isDownloading.value = true
-    try {
-      const update = await check()
-      if (!update) return
-
-      // 下载并安装
-      await update.downloadAndInstall((event) => {
-        switch (event.event) {
-          case 'Started':
-            downloadProgress.value = 0
-            break
-          case 'Progress':
-            downloadProgress.value = (event.data.downloaded / event.data.contentLength) * 100
-            break
-          case 'Finished':
-            downloadProgress.value = 100
-            break
-        }
-      })
-
-      // 重启应用
-      await relaunch()
-    } catch (error) {
-      console.error('Failed to download and install update:', error)
-      throw error
-    } finally {
-      isDownloading.value = false
-    }
-  }
-
-  return {
-    isChecking,
-    isDownloading,
-    updateAvailable,
-    updateInfo,
-    downloadProgress,
-    checkForUpdates,
-    downloadAndInstall,
-  }
-}
-```
-
-#### 3.2 创建更新对话框组件
-```vue
-<!-- src/components/updater/update-dialog.vue -->
-<script setup lang="ts">
-import { useUpdater } from '@/composables/use-updater'
-
-const {
-  updateInfo,
-  isDownloading,
-  downloadProgress,
-  downloadAndInstall,
-} = useUpdater()
-
-const emit = defineEmits(['close'])
-
-const handleUpdate = async () => {
-  try {
-    await downloadAndInstall()
-  } catch (error) {
-    // 显示错误提示
-  }
-}
-</script>
-
-<template>
-  <div class="update-dialog-overlay">
-    <div class="update-dialog">
-      <h2>🎉 新版本可用</h2>
-
-      <div class="update-info">
-        <p class="version">版本 {{ updateInfo?.version }}</p>
-        <p class="date" v-if="updateInfo?.date">
-          发布日期: {{ updateInfo.date }}
-        </p>
-
-        <div class="release-notes" v-if="updateInfo?.body">
-          <h3>更新内容:</h3>
-          <div v-html="updateInfo.body"></div>
-        </div>
-      </div>
-
-      <div v-if="isDownloading" class="download-progress">
-        <div class="progress-bar">
-          <div
-            class="progress-fill"
-            :style="{ width: `${downloadProgress}%` }"
-          ></div>
-        </div>
-        <p>下载中... {{ downloadProgress.toFixed(0) }}%</p>
-      </div>
-
-      <div class="actions">
-        <button
-          @click="emit('close')"
-          :disabled="isDownloading"
-          class="btn-secondary"
-        >
-          稍后提醒
-        </button>
-        <button
-          @click="handleUpdate"
-          :disabled="isDownloading"
-          class="btn-primary"
-        >
-          {{ isDownloading ? '下载中...' : '立即更新' }}
-        </button>
-      </div>
-    </div>
-  </div>
-</template>
-```
-
-#### 3.3 集成到应用主入口
-```vue
-<!-- src/App.vue -->
-<script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useUpdater } from '@/composables/use-updater'
-import UpdateDialog from '@/components/updater/update-dialog.vue'
-
-const { updateAvailable, checkForUpdates } = useUpdater()
-const showUpdateDialog = ref(false)
-
-onMounted(async () => {
-  // 启动时检查更新（延迟3秒，避免影响启动速度）
-  setTimeout(async () => {
-    const hasUpdate = await checkForUpdates()
-    if (hasUpdate) {
-      showUpdateDialog.value = true
-    }
-  }, 3000)
-})
-</script>
-
-<template>
-  <!-- 现有内容 -->
-
-  <!-- 更新对话框 -->
-  <update-dialog
-    v-if="showUpdateDialog"
-    @close="showUpdateDialog = false"
-  />
-</template>
-```
-
-#### 3.4 添加手动检查更新菜单项
-```rust
-// 在菜单中添加"检查更新"选项
-let mat_menu = SubmenuBuilder::new(app, "Mat")
-    .text("about", "About Mat")
-    .separator()
-    .text("check_updates", "Check for Updates...")
-    .text("settings", "Settings...")
-    // ...
-```
-
-### Phase 4: CI/CD 配置 (Day 4)
-
-#### 4.1 配置 GitHub Actions 自动发布
-```yaml
-# .github/workflows/release.yml
-name: Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  release:
-    strategy:
-      matrix:
-        platform: [macos-latest, ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.platform }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: npm install
-        working-directory: ./frontend
-
-      - name: Build and sign
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npm run tauri build
-        working-directory: ./frontend
-
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            frontend/src-tauri/target/release/bundle/**/*.dmg
-            frontend/src-tauri/target/release/bundle/**/*.app.tar.gz
-            frontend/src-tauri/target/release/bundle/**/*.msi
-            frontend/src-tauri/target/release/bundle/**/*.AppImage
-            frontend/src-tauri/target/release/bundle/**/*.deb
-            frontend/src-tauri/target/release/bundle/**/*.sig
-```
-
-#### 4.2 设置 GitHub Secrets
-在 GitHub 仓库设置中添加：
-- `TAURI_SIGNING_PRIVATE_KEY`: 私钥内容
-- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: 私钥密码
-
-## 🎨 用户体验设计
-
-### 更新检查时机
-1. **应用启动**: 延迟 3 秒后自动检查
-2. **手动触发**: 菜单 "Mat → Check for Updates..."
-3. **定期检查**: 每 24 小时自动检查一次
-
-### 更新提示策略
-1. **有更新**: 显示对话框，展示版本信息和更新内容
-2. **无更新**:
-   - 启动时检查：静默（不打扰用户）
-   - 手动检查：显示"已是最新版本"提示
-3. **检查失败**: 静默处理，记录日志
-
-### 更新过程
-1. **下载**: 显示进度条
-2. **验证**: 自动验证签名（失败则终止）
-3. **安装**: 自动安装并重启应用
-
-## 🔒 安全性考虑
-
-1. **签名验证**: 所有更新包必须通过 Ed25519 签名验证
-2. **HTTPS**: 仅通过 HTTPS 下载更新
-3. **密钥管理**:
-   - 私钥仅存储在 CI/CD secrets 中
-   - 公钥内嵌在应用配置中
-4. **更新来源**: 仅从 GitHub Releases 获取更新
-
-## 📊 监控和日志
+将 `use-updater.ts` 中的状态切换改为原子操作:
 
 ```typescript
-// 记录更新事件
-const logUpdateEvent = (event: string, data?: any) => {
-  console.log(`[Updater] ${event}`, data)
-  // 可以发送到分析服务
-}
+// downloadAndInstall() 中:
+// 当前:
+//   isReadyToRestart.value = true  (line 129)
+//   isDownloading.value = false    (finally, line 136)
+// → 无震荡，顺序已正确
 
-// 使用示例
-logUpdateEvent('check_started')
-logUpdateEvent('update_available', { version: '0.1.19' })
-logUpdateEvent('download_started')
-logUpdateEvent('download_completed')
-logUpdateEvent('install_started')
+// 但 update-progress-bar 的 v-if 条件需要覆盖过渡态
+// 方案: 引入 phase 状态或确保 transition 不会因瞬间消失重新触发
 ```
 
-## 🧪 测试计划
+更稳妥的方案: 用 `phase` 状态机替代多个 boolean:
 
-### 测试场景
-1. ✅ 检测到新版本
-2. ✅ 已是最新版本
-3. ✅ 网络错误处理
-4. ✅ 签名验证失败
-5. ✅ 下载中断恢复
-6. ✅ 安装过程中断
-7. ✅ 跨版本更新（跳过多个版本）
-8. ✅ 降级保护
+```typescript
+type UpdatePhase = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
+const phase = ref<UpdatePhase>('idle')
+```
 
-### 测试环境
-- macOS (Intel & Apple Silicon)
-- Windows 10/11
-- Ubuntu 20.04/22.04
+### 3. i18n 新增键
 
-## 📝 发布流程
+```typescript
+updater: {
+  backgroundUpdate: 'Background Update',  // 后台更新按钮
+  backgroundUpdateDesc: 'Download in background, notify when ready',
+}
+```
 
-1. **代码准备**
-   ```bash
-   # 更新版本号
-   npm version patch  # 或 minor, major
-   git push && git push --tags
-   ```
+---
 
-2. **GitHub Actions 自动构建**
-   - 自动触发 CI/CD
-   - 编译各平台安装包
-   - 生成签名文件
-   - 创建 latest.json
+## 安全性
 
-3. **发布到 GitHub Releases**
-   - 上传安装包
-   - 上传签名文件
-   - 上传 latest.json
-   - 填写 Release Notes
+- **签名验证**: Ed25519，公钥内嵌 tauri.conf.json，私钥仅存 GitHub Secrets
+- **传输安全**: HTTPS only (GitHub Releases)
+- **来源限制**: 仅 `github.com/Hierifer/mat` releases endpoint
+- **release notes**: 通过 `v-html` 渲染 — 内容来自 GitHub Release body，仅项目维护者可编辑
 
-4. **用户接收更新**
-   - 应用自动检测新版本
-   - 提示用户更新
-   - 一键下载安装
+---
 
-## 📚 参考资源
+## 文件索引
 
-- [Tauri Updater Plugin](https://v2.tauri.app/plugin/updater/)
-- [Tauri v2 Auto-Update Guide](https://docs.crabnebula.dev/cloud/guides/auto-updates-tauri/)
-- [GitHub Actions for Tauri](https://tauri.app/v1/guides/building/cross-platform)
-- [Tauri Signing Guide](https://tauri.app/v1/guides/distribution/sign-windows)
-
-## 🎯 时间线
-
-- **Day 1**: 基础配置和密钥生成 ✅
-- **Day 2**: 后端集成和命令实现 ✅
-- **Day 3**: 前端 UI 和用户体验 ✅
-- **Day 4**: CI/CD 配置和自动化 ✅
-- **Day 5**: 测试和优化 ⏳
-- **Day 6**: 文档和发布 ⏳
-
-## ✨ 未来增强
-
-1. **增量更新**: 仅下载差异部分，减少流量
-2. **多渠道支持**: 支持 Beta/Stable 不同更新通道
-3. **回滚功能**: 更新出错时自动回滚
-4. **更新统计**: 收集更新成功率等数据
-5. **自定义更新服务器**: 企业内网部署
+| 文件 | 职责 |
+|------|------|
+| `src-tauri/src/lib.rs` | Rust 端 updater 插件注册、菜单角标、事件转发 |
+| `src-tauri/tauri.conf.json` | updater endpoint / pubkey / createUpdaterArtifacts |
+| `src/composables/use-updater.ts` | 核心更新逻辑，单例状态管理 |
+| `src/components/updater/update-dialog.vue` | 更新弹窗 UI |
+| `src/components/updater/update-progress-bar.vue` | 底部常驻进度条 UI |
+| `src/App.vue` | 启动自动检查、事件监听、组件挂载 |
+| `src/i18n/locales/en.ts` | 更新相关国际化文本 |
+| `.github/workflows/release.yml` | CI 构建 + 签名 + 发布 |
