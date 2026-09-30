@@ -41,6 +41,9 @@ tauri-plugin-dialog = "2"
 # tmux integration
 regex = "1"
 dirs = "5"
+
+# SQLite for Studio chat persistence
+rusqlite = { version = "0.31", features = ["bundled"] }
 lazy_static = "1.4"
 
 # DashScope Paraformer speech recognition

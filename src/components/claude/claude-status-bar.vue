@@ -20,6 +20,13 @@ const visible = computed(() => isRunning.value || hasUsage.value)
 const metricsRenderer = (metrics: ClaudeMetrics) => {
   const result = []
 
+  if (metrics.toolUses !== null && metrics.toolUses > 0) {
+    result.push({
+      label: 'tools',
+      value: String(metrics.toolUses),
+    })
+  }
+
   if (metrics.inputTokens !== null) {
     result.push({
       label: 'in',

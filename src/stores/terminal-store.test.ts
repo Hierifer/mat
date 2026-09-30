@@ -560,6 +560,7 @@ describe('terminal-store studio mode', () => {
         paneId: 'p1',
         createdAt: Date.now(),
         viewMode: 'agent',
+        status: 'active',
       })
 
       store.setStudioBranchViewMode('b1', 'terminal')
@@ -674,6 +675,7 @@ describe('terminal-store studio mode', () => {
         paneId: 'p1',
         createdAt: Date.now(),
         viewMode: 'agent',
+        status: 'active',
       })
       mockInvoke.mockResolvedValue(undefined)
 

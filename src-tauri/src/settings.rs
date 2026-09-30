@@ -45,7 +45,7 @@ impl AppSettings {
     }
 
     /// Get the application data directory
-    fn get_app_data_dir() -> Result<PathBuf, String> {
+    pub fn get_app_data_dir() -> Result<PathBuf, String> {
         let dir = if cfg!(target_os = "macos") {
             // macOS: ~/Library/Application Support/mat
             dirs::home_dir()

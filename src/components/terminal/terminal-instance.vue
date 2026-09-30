@@ -270,6 +270,11 @@ onMounted(async () => {
   terminal = managed.terminal
   const { fitAddon, outputBuffer } = managed
 
+  if (!terminal) {
+    console.error('[Terminal] Failed to create terminal instance for pane:', paneId)
+    return
+  }
+
   // Watch for theme changes
   watch(() => store.currentThemeName, () => {
     if (terminal) {

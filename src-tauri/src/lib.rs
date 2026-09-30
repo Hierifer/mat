@@ -1,5 +1,6 @@
 mod agent;
 mod clipboard;
+mod db;
 mod git;
 mod pty;
 mod settings;
@@ -7,6 +8,7 @@ mod settings;
 mod speech;
 
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Manager, Emitter}; // Import Manager and Emitter traits
 use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItemKind};
@@ -65,6 +67,15 @@ pub fn run() {
 
             let agent_manager = Arc::new(Mutex::new(AgentManager::new()));
             app.manage(agent_manager);
+
+            // Initialize Studio SQLite database
+            let app_data_dir = settings::AppSettings::get_app_data_dir()
+                .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            let studio_db = Arc::new(StdMutex::new(
+                db::StudioDb::open(app_data_dir)
+                    .map_err(|e| Box::<dyn std::error::Error>::from(e))?,
+            ));
+            app.manage(studio_db);
 
             // Proactively trigger macOS TCC permission dialogs for protected folders
             #[cfg(target_os = "macos")]
@@ -240,6 +251,15 @@ pub fn run() {
             git::git_stash_pop,
             git::git_stash_apply,
             git::git_stash_drop,
+            // db commands (Studio chat persistence)
+            db::db_create_room,
+            db::db_get_rooms,
+            db::db_add_message,
+            db::db_get_messages,
+            db::db_update_room_status,
+            db::db_delete_room,
+            // git squash merge
+            git::git_squash_merge,
             // agent commands
             agent::commands::agent_spawn,
             agent::commands::agent_send,

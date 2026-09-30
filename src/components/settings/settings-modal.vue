@@ -5,12 +5,34 @@ import { availableLocales } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 import { ref, watch, computed } from 'vue'
 import IconFont from '@/components/ui/icon-font.vue'
+import { useNotification } from '@/composables/use-notification'
 
 const store = useTerminalStore()
 const { locale, t } = useI18n()
+const { notify } = useNotification()
 const activeCategory = ref('Appearance')
 const speechSaveStatus = ref('')
 const clearStateStatus = ref('')
+const notificationTestStatus = ref('')
+
+const testNotification = async (type: 'info' | 'success' | 'error') => {
+  notificationTestStatus.value = t('settings.testingPanel.sending')
+  const titles: Record<string, string> = {
+    info: t('settings.testingPanel.infoTitle'),
+    success: t('settings.testingPanel.successTitle'),
+    error: t('settings.testingPanel.errorTitle'),
+  }
+  const bodies: Record<string, string> = {
+    info: t('settings.testingPanel.infoBody'),
+    success: t('settings.testingPanel.successBody'),
+    error: t('settings.testingPanel.errorBody'),
+  }
+  const result = await notify({ title: titles[type], body: bodies[type] })
+  notificationTestStatus.value = result
+    ? t('settings.testingPanel.sent')
+    : t('settings.testingPanel.failed')
+  setTimeout(() => { notificationTestStatus.value = '' }, 3000)
+}
 
 const clearSavedState = () => {
   store.clearSavedTerminalState()
@@ -24,7 +46,22 @@ const saveSpeechSettings = async () => {
   setTimeout(() => { speechSaveStatus.value = '' }, 3000)
 }
 
-const categories = [ 'Appearance', 'General', 'View', 'Shortcuts' ]
+const toggleNotificationsEnabled = () => {
+  store.notificationsEnabled = !store.notificationsEnabled
+  localStorage.setItem('materm_notifications_enabled', String(store.notificationsEnabled))
+}
+
+const toggleNotifyAgentWaiting = () => {
+  store.notifyOnAgentWaiting = !store.notifyOnAgentWaiting
+  localStorage.setItem('materm_notify_agent_waiting', String(store.notifyOnAgentWaiting))
+}
+
+const toggleNotifyAgentDone = () => {
+  store.notifyOnAgentDone = !store.notifyOnAgentDone
+  localStorage.setItem('materm_notify_agent_done', String(store.notifyOnAgentDone))
+}
+
+const categories = [ 'Appearance', 'General', 'View', 'Shortcuts', 'Testing' ]
 
 // Sync locale with store
 watch(() => store.locale, (newLocale) => {
@@ -153,7 +190,6 @@ const themeColors = computed(() => {
       </div>
       <div class="settings-content" :style="{ background: themeColors.modalBg }">
         <div class="settings-header" :style="{ borderBottomColor: themeColors.headerBorder }">
-            <h3 :style="{ color: themeColors.headerColor }">{{ $t(`settings.${activeCategory.toLowerCase()}`) }}</h3>
             <button class="close-btn" :style="{ color: themeColors.closeBtnColor }" @click="store.toggleSettings"><icon-font name="close" :size="11" /></button>
         </div>
         
@@ -300,6 +336,44 @@ const themeColors = computed(() => {
               <p class="setting-description" :style="{ color: themeColors.descColor }">
                 {{ $t('settings.enableCommandNotificationsDesc') }}
               </p>
+            </div>
+            <!-- System notification master toggle -->
+            <div class="setting-row" style="margin-top: 12px;">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  :checked="store.notificationsEnabled"
+                  @change="toggleNotificationsEnabled"
+                  class="checkbox-input"
+                />
+                <span class="checkbox-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.systemNotifications', '系统推送通知') }}</span>
+              </label>
+              <p class="setting-description" :style="{ color: themeColors.descColor }">
+                {{ $t('settings.systemNotificationsDesc', '通过系统通知中心发送推送') }}
+              </p>
+            </div>
+            <!-- Sub-toggles (indented) -->
+            <div v-if="store.notificationsEnabled" class="setting-row" style="margin-top: 8px; padding-left: 20px;">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  :checked="store.notifyOnAgentWaiting"
+                  @change="toggleNotifyAgentWaiting"
+                  class="checkbox-input"
+                />
+                <span class="checkbox-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.notifyAgentWaiting', 'Agent 等待输入时通知') }}</span>
+              </label>
+            </div>
+            <div v-if="store.notificationsEnabled" class="setting-row" style="margin-top: 4px; padding-left: 20px;">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  :checked="store.notifyOnAgentDone"
+                  @change="toggleNotifyAgentDone"
+                  class="checkbox-input"
+                />
+                <span class="checkbox-text" :style="{ color: themeColors.checkboxText }">{{ $t('settings.notifyAgentDone', 'Agent 任务完成时通知') }}</span>
+              </label>
             </div>
           </div>
 
@@ -560,6 +634,54 @@ const themeColors = computed(() => {
             />
           </div>
         </div>
+
+        <div v-if="activeCategory === 'Testing'" class="settings-section">
+          <div class="setting-item">
+            <label class="setting-label" :style="{ color: themeColors.labelColor }">{{ $t('settings.testingPanel.systemNotification') }}</label>
+            <p class="setting-description" :style="{ color: themeColors.descColor, paddingLeft: 0, marginBottom: '15px' }">
+              {{ $t('settings.testingPanel.systemNotificationDesc') }}
+            </p>
+            <div class="test-btn-group">
+              <button
+                @click="testNotification('info')"
+                class="font-reset-btn"
+                :style="{
+                  background: themeColors.buttonBg,
+                  borderColor: themeColors.buttonBorder,
+                  color: themeColors.inputColor,
+                  marginLeft: 0,
+                }"
+              >
+                {{ $t('settings.testingPanel.sendInfo') }}
+              </button>
+              <button
+                @click="testNotification('success')"
+                class="font-reset-btn"
+                :style="{
+                  background: themeColors.buttonBg,
+                  borderColor: themeColors.buttonBorder,
+                  color: themeColors.inputColor,
+                  marginLeft: 0,
+                }"
+              >
+                {{ $t('settings.testingPanel.sendSuccess') }}
+              </button>
+              <button
+                @click="testNotification('error')"
+                class="font-reset-btn"
+                :style="{
+                  background: themeColors.buttonBg,
+                  borderColor: themeColors.buttonBorder,
+                  color: themeColors.inputColor,
+                  marginLeft: 0,
+                }"
+              >
+                {{ $t('settings.testingPanel.sendError') }}
+              </button>
+            </div>
+            <span v-if="notificationTestStatus" style="font-size: 12px; margin-top: 8px; display: block;" :style="{ color: notificationTestStatus === $t('settings.testingPanel.failed') ? '#ff4d4f' : '#52c41a' }">{{ notificationTestStatus }}</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -637,18 +759,11 @@ const themeColors = computed(() => {
 
 .settings-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     padding: 20px 30px;
     border-bottom: 1px solid;
     transition: border-color 0.3s;
-}
-
-.settings-header h3 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 500;
-    transition: color 0.3s;
 }
 
 .close-btn {
@@ -890,5 +1005,11 @@ const themeColors = computed(() => {
   font-size: 12px;
   font-weight: 500;
   transition: color 0.3s;
+}
+
+.test-btn-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 </style>

@@ -2,23 +2,108 @@ import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification'
 
-export function useNotification() {
-  const permissionGranted = ref(false)
-  // Track whether Tauri native notifications actually work (they don't in dev mode on macOS)
-  const nativeWorks = ref(true)
-  // Whether to use osascript fallback (macOS only)
-  const useOsascript = ref(false)
+// ============================================================================
+// Singleton state — shared across all useNotification() callers
+// ============================================================================
+const permissionGranted = ref(false)
+const nativeWorks = ref(true)
+const useOsascript = ref(false)
+let probePromise: Promise<void> | null = null
 
-  // Check and request permission
+// Send via macOS osascript (always works, no signing required)
+async function sendOsascriptNotification(title: string, body: string): Promise<boolean> {
+  try {
+    await invoke('send_macos_notification', { title, body })
+    console.log('[Notification] Sent via osascript:', title)
+    return true
+  } catch (error) {
+    console.error('[Notification] osascript failed:', error)
+    return false
+  }
+}
+
+// Probe once: detect if Tauri native notifications actually work.
+// macOS dev builds (ad-hoc signed) silently swallow notifications —
+// sendNotification() resolves OK but nothing appears. We detect this
+// by checking if isPermissionGranted() returns something other than true.
+async function probeOnce(): Promise<void> {
+  try {
+    const granted = await isPermissionGranted()
+    console.log('[Notification] isPermissionGranted:', granted)
+    if (granted !== true) {
+      const perm = await requestPermission()
+      console.log('[Notification] requestPermission result:', perm)
+      if (perm !== 'granted') {
+        nativeWorks.value = false
+      } else {
+        const recheck = await isPermissionGranted()
+        console.log('[Notification] recheck after grant:', recheck)
+        if (recheck !== true) {
+          nativeWorks.value = false
+        } else {
+          permissionGranted.value = true
+        }
+      }
+    } else {
+      permissionGranted.value = true
+    }
+  } catch (e) {
+    console.error('[Notification] probe error:', e)
+    nativeWorks.value = false
+  }
+
+  // In dev mode, Tauri native notifications silently fail on macOS (ad-hoc signed).
+  // Force osascript fallback regardless of permission probe result.
+  const isDev = import.meta.env.DEV
+  if (isDev) {
+    console.log('[Notification] Dev mode detected, forcing osascript fallback')
+    nativeWorks.value = false
+  }
+
+  console.log('[Notification] probe result: nativeWorks =', nativeWorks.value, ', permissionGranted =', permissionGranted.value)
+
+  // If native doesn't work, try osascript fallback (macOS)
+  if (!nativeWorks.value) {
+    try {
+      // @ts-ignore — check if Tauri runtime is available
+      if (window.__TAURI_INTERNALS__) {
+        await invoke('send_macos_notification', { title: 'Materm', body: 'Notifications enabled' })
+        useOsascript.value = true
+        console.log('[Notification] Using osascript fallback for macOS')
+      }
+    } catch {
+      // Not macOS or osascript not available
+    }
+  }
+}
+
+// Start probe immediately at module load (runs once)
+function ensureProbed(): Promise<void> {
+  if (!probePromise) {
+    // @ts-ignore
+    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+      probePromise = probeOnce()
+    } else {
+      probePromise = Promise.resolve()
+    }
+  }
+  return probePromise
+}
+
+// Kick off probe at import time
+ensureProbed()
+
+// ============================================================================
+// Composable — returns methods that use the shared singleton state
+// ============================================================================
+export function useNotification() {
   const checkPermission = async () => {
     try {
       let granted = await isPermissionGranted()
-
       if (!granted) {
         const permission = await requestPermission()
         granted = permission === 'granted'
       }
-
       permissionGranted.value = granted
       return granted
     } catch (error) {
@@ -27,26 +112,16 @@ export function useNotification() {
     }
   }
 
-  // Send via macOS osascript (always works, no signing required)
-  const sendOsascriptNotification = async (title: string, body: string) => {
-    try {
-      await invoke('send_macos_notification', { title, body })
-      console.log('[Notification] Sent via osascript:', title)
-      return true
-    } catch (error) {
-      console.error('[Notification] osascript failed:', error)
-      return false
-    }
-  }
-
-  // Send a notification (Tauri native → osascript fallback on macOS)
   const notify = async (options: {
     title: string
     body?: string
     icon?: string
     sound?: string
   }) => {
-    // macOS fallback: osascript
+    // Wait for probe to complete before deciding which path to use
+    await ensureProbed()
+
+    // macOS osascript fallback
     if (useOsascript.value) {
       return sendOsascriptNotification(options.title, options.body || '')
     }
@@ -77,77 +152,25 @@ export function useNotification() {
       }
     }
 
-    // Final fallback: try osascript (might fail on non-macOS)
+    // Final fallback: try osascript
     return sendOsascriptNotification(options.title, options.body || '')
   }
 
-  // Convenience methods
   const notifyTaskComplete = async (taskName: string, details?: string) => {
-    return notify({
-      title: 'Task Complete',
-      body: details || `${taskName}`,
-    })
+    return notify({ title: 'Task Complete', body: details || taskName })
   }
 
   const notifyError = async (message: string, details?: string) => {
-    return notify({
-      title: 'Error',
-      body: details || message,
-    })
+    return notify({ title: 'Error', body: details || message })
   }
 
   const notifySuccess = async (message: string, details?: string) => {
-    return notify({
-      title: 'Success',
-      body: details || message,
-    })
+    return notify({ title: 'Success', body: details || message })
   }
 
   const notifyInfo = async (message: string, details?: string) => {
-    return notify({
-      title: 'Info',
-      body: details || message,
-    })
+    return notify({ title: 'Info', body: details || message })
   }
-
-  // Detect if Tauri native notifications actually work.
-  // macOS dev builds (ad-hoc signed) return undefined from isPermissionGranted()
-  // and silently swallow notifications. Detect this and switch to osascript.
-  const probeNativeNotification = async () => {
-    try {
-      const granted = await isPermissionGranted()
-      // macOS dev mode returns undefined instead of true/false
-      if (granted !== true) {
-        const perm = await requestPermission()
-        if (perm !== 'granted') {
-          nativeWorks.value = false
-          return
-        }
-        const recheck = await isPermissionGranted()
-        if (recheck !== true) {
-          nativeWorks.value = false
-          return
-        }
-      }
-      permissionGranted.value = true
-    } catch {
-      nativeWorks.value = false
-    }
-  }
-
-  // Initialize
-  probeNativeNotification().then(async () => {
-    if (!nativeWorks.value) {
-      // Test if osascript works (macOS)
-      try {
-        await invoke('send_macos_notification', { title: '', body: '' }).catch(() => {})
-        useOsascript.value = true
-        console.log('[Notification] Using osascript fallback for macOS')
-      } catch {
-        // Not macOS or osascript not available
-      }
-    }
-  })
 
   return {
     permissionGranted,

@@ -98,6 +98,21 @@ const handleDeleteBranch = async (branchId: string, event: Event) => {
   }
 }
 
+const handleMergeBranch = async (branchId: string, event: Event) => {
+  event.stopPropagation()
+  const branch = store.studioBranches.find(b => b.id === branchId)
+  if (!branch) return
+
+  const msg = t('studio.confirmMerge', { name: branch.name, target: store.studioProject?.defaultBranch ?? 'main' })
+  if (confirm(msg)) {
+    try {
+      await store.mergeStudioBranch(branchId)
+    } catch (error) {
+      console.error('[Studio] Merge failed:', error)
+    }
+  }
+}
+
 const isRefreshing = ref(false)
 const handleRefresh = async () => {
   isRefreshing.value = true
@@ -117,10 +132,15 @@ const handleRefresh = async () => {
 
     <!-- Project info -->
     <div class="project-info" v-if="store.studioProject">
-      <div class="project-name">{{ store.studioProject.name }}</div>
-      <div class="project-meta">
-        <span class="default-branch">{{ store.studioProject.defaultBranch }}</span>
+      <div class="project-info-left">
+        <div class="project-name">{{ store.studioProject.name }}</div>
+        <div class="project-meta">
+          <span class="default-branch">{{ store.studioProject.defaultBranch }}</span>
+        </div>
       </div>
+      <button class="project-refresh-btn" :class="{ spinning: isRefreshing }" @click="handleRefresh" :title="t('studio.gitPanel.refresh')">
+        <icon-font name="refresh" :size="13" />
+      </button>
     </div>
 
     <!-- Branch list -->
@@ -129,13 +149,13 @@ const handleRefresh = async () => {
         v-for="branch in store.studioBranches"
         :key="branch.id"
         class="branch-item"
-        :class="{ active: branch.id === store.activeStudioBranchId }"
+        :class="{ active: branch.id === store.activeStudioBranchId, merged: branch.status === 'merged' }"
         @click="handleBranchClick(branch.id)"
       >
-        <icon-font class="branch-icon" name="branch" :size="14" />
+        <icon-font class="branch-icon" :name="branch.status === 'merged' ? 'check' : 'branch'" :size="14" />
         <div class="branch-info">
           <input
-            v-if="editingBranchId === branch.id"
+            v-if="editingBranchId === branch.id && branch.status !== 'merged'"
             v-model="editingBranchName"
             class="branch-name-input"
             @keydown="handleEditBranchKeydown"
@@ -143,10 +163,24 @@ const handleRefresh = async () => {
             @click.stop
             autofocus
           />
-          <span v-else class="branch-name" @click.stop="startEditingBranch(branch)">{{ branch.name }}</span>
+          <span v-else class="branch-name" :class="{ 'merged-name': branch.status === 'merged' }" @click.stop="branch.status !== 'merged' && startEditingBranch(branch)">{{ branch.name }}</span>
           <span class="branch-time">{{ formatTime(branch.createdAt) }}</span>
         </div>
+        <span
+          v-if="branch.status === 'active' && store.agentStatuses[branch.id]"
+          class="branch-status-dot"
+          :class="store.agentStatuses[branch.id]"
+        />
+        <!-- Merge button: only for active, non-default branches -->
         <button
+          v-if="branch.status === 'active' && branch.name !== store.studioProject?.defaultBranch"
+          class="branch-merge"
+          @click="handleMergeBranch(branch.id, $event)"
+          :title="t('studio.mergeBranch', 'Merge branch')"
+        ><icon-font name="check" :size="10" /></button>
+        <!-- Delete button: only for active, non-default branches -->
+        <button
+          v-if="branch.status === 'active' && branch.name !== store.studioProject?.defaultBranch"
           class="branch-delete"
           @click="handleDeleteBranch(branch.id, $event)"
           :title="t('studio.deleteBranch')"
@@ -184,12 +218,6 @@ const handleRefresh = async () => {
         </button>
       </div>
 
-      <div class="footer-actions">
-        <!-- Refresh git info -->
-        <button class="footer-btn" :class="{ spinning: isRefreshing }" @click="handleRefresh" :title="t('studio.gitPanel.refresh')">
-          <icon-font name="refresh" :size="13" />
-        </button>
-      </div>
     </div>
   </div>
 </template>
@@ -220,9 +248,46 @@ const handleRefresh = async () => {
 
 /* Project info */
 .project-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid #333;
   flex-shrink: 0;
+}
+
+.project-info-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.project-refresh-btn:hover {
+  background: #37373d;
+  color: #fff;
+}
+
+.light-theme .project-refresh-btn:hover {
+  background: #e0e0e0;
+  color: #000;
+}
+
+.project-refresh-btn.spinning svg {
+  animation: spin 0.6s linear infinite;
 }
 
 .light-theme .project-info {
@@ -319,6 +384,39 @@ const handleRefresh = async () => {
   flex-shrink: 0;
 }
 
+.branch-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #666;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.branch-status-dot.busy {
+  background: #ff9800;
+  animation: sidebar-pulse 1.2s ease-in-out infinite;
+}
+
+.branch-status-dot.waiting {
+  background: #2196f3;
+  animation: sidebar-breathe 2s ease-in-out infinite;
+}
+
+.branch-status-dot.done {
+  background: #4caf50;
+}
+
+@keyframes sidebar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes sidebar-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.15); }
+}
+
 .branch-item.active .branch-icon {
   color: #007acc;
 }
@@ -379,6 +477,47 @@ const handleRefresh = async () => {
 
 .light-theme .branch-time {
   color: #999;
+}
+
+/* Merged branch styles */
+.branch-item.merged {
+  opacity: 0.6;
+}
+
+.branch-item.merged .branch-icon {
+  color: #4caf50;
+}
+
+.merged-name {
+  font-style: italic;
+  cursor: default !important;
+}
+
+.branch-merge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: #666;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  transition: all 0.15s;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.branch-item:hover .branch-merge {
+  opacity: 1;
+}
+
+.branch-merge:hover {
+  background: #4caf50;
+  color: white;
 }
 
 .branch-delete {
@@ -520,13 +659,6 @@ const handleRefresh = async () => {
   background: #d8d8d8;
   border-color: #007acc;
   color: #000;
-}
-
-.footer-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
 }
 
 .footer-btn.spinning svg {

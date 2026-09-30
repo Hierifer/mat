@@ -1,4 +1,4 @@
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, type Ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
@@ -35,26 +35,48 @@ function nextItemId(): string {
  * Manages a headless Claude Code agent session (stream-json mode).
  * Spawns the process via the Rust `agent_spawn` command, parses the
  * stream-json events into a renderable timeline.
+ *
+ * @param roomId - Optional reactive ref to a chat room ID for SQLite persistence
  */
-export function useAgentSession() {
+export function useAgentSession(roomId?: Ref<string | null>) {
   const agentId = ref<string | null>(null)
   const items = ref<AgentTimelineItem[]>([])
   const isRunning = ref(false)   // process alive
   const isBusy = ref(false)      // waiting for current turn to finish
+  const isInitialized = ref(false) // received system/init from Claude Code
   const model = ref('')
   const tools = ref<string[]>([])
   const slashCommands = ref<string[]>([])
   const totalCostUsd = ref(0)
   const lastDurationMs = ref(0)
   const exitCode = ref<number | null>(null)
+  const readOnly = ref(false)
 
   const unlisteners = shallowRef<UnlistenFn[]>([])
   // Map tool_use_id -> timeline item holding the tool card
   const toolItemsById = new Map<string, AgentTimelineItem>()
 
+  function persistMessage(item: AgentTimelineItem) {
+    const rid = roomId?.value
+    if (!rid) return
+    invoke('db_add_message', {
+      message: {
+        id: item.id,
+        roomId: rid,
+        kind: item.kind,
+        text: item.text,
+        toolJson: item.tool ? JSON.stringify(item.tool) : null,
+        attachmentsJson: item.attachments ? JSON.stringify(item.attachments) : null,
+        timestamp: item.timestamp,
+      }
+    }).catch(e => console.warn('[Agent] DB write failed:', e))
+  }
+
   function pushItem(item: Omit<AgentTimelineItem, 'id' | 'timestamp'>): AgentTimelineItem {
     const full: AgentTimelineItem = { ...item, id: nextItemId(), timestamp: Date.now() }
     items.value.push(full)
+    // Persist to SQLite
+    persistMessage(full)
     // Return the reactive proxy element so later mutations trigger updates
     return items.value[items.value.length - 1]
   }
@@ -78,6 +100,8 @@ export function useAgentSession() {
     } catch {
       return
     }
+
+    console.log('[Agent] event:', event.type, event.subtype || '', JSON.stringify(event).slice(0, 500))
 
     switch (event.type) {
       case 'system': {
@@ -134,6 +158,8 @@ export function useAgentSession() {
               }
               item.tool.result = text
               item.tool.isError = !!block.is_error
+              // Persist updated tool result
+              persistMessage(item)
             }
           }
         }
@@ -155,13 +181,47 @@ export function useAgentSession() {
     }
   }
 
+  async function loadHistory(id: string) {
+    // @ts-ignore
+    if (!window.__TAURI_INTERNALS__) return
+
+    try {
+      const msgs = await invoke<Array<{
+        id: string
+        roomId: string
+        kind: string
+        text: string
+        toolJson: string | null
+        attachmentsJson: string | null
+        timestamp: number
+      }>>('db_get_messages', { roomId: id })
+
+      for (const msg of msgs) {
+        const item: AgentTimelineItem = {
+          id: msg.id,
+          kind: msg.kind as AgentTimelineItem['kind'],
+          text: msg.text,
+          tool: msg.toolJson ? JSON.parse(msg.toolJson) : undefined,
+          attachments: msg.attachmentsJson ? JSON.parse(msg.attachmentsJson) : undefined,
+          timestamp: msg.timestamp,
+        }
+        items.value.push(item)
+        if (item.tool) {
+          toolItemsById.set(item.tool.id, items.value[items.value.length - 1])
+        }
+      }
+    } catch (e) {
+      console.warn('[Agent] Failed to load history:', e)
+    }
+  }
+
   async function start(cwd: string) {
     if (agentId.value) return
 
     // @ts-ignore
     if (!window.__TAURI_INTERNALS__) return
 
-    items.value = []
+    // Don't clear items — loadHistory may have already populated them
     toolItemsById.clear()
     exitCode.value = null
     totalCostUsd.value = 0
@@ -187,6 +247,8 @@ export function useAgentSession() {
   }
 
   async function send(text: string, attachments?: AgentAttachment[]) {
+    if (readOnly.value) return
+
     const trimmed = text.trim()
     const hasAttachments = attachments && attachments.length > 0
     if ((!trimmed && !hasAttachments) || !agentId.value || !isRunning.value) return
@@ -227,6 +289,8 @@ export function useAgentSession() {
 
   async function restart(cwd: string) {
     await stop()
+    items.value = []
+    toolItemsById.clear()
     await start(cwd)
   }
 
@@ -241,9 +305,11 @@ export function useAgentSession() {
     totalCostUsd,
     lastDurationMs,
     exitCode,
+    readOnly,
     start,
     send,
     stop,
     restart,
+    loadHistory,
   }
 }

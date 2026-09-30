@@ -456,6 +456,53 @@ pub fn git_remove_worktree(
 }
 
 #[tauri::command]
+pub fn git_squash_merge(
+    repo_path: String,
+    branch_name: String,
+    default_branch: String,
+) -> Result<(), String> {
+    // 1. Checkout default branch
+    let output = Command::new("git")
+        .args(["-C", &repo_path, "checkout", &default_branch])
+        .output()
+        .map_err(|e| format!("Failed to run git checkout: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(format!("git checkout failed: {}", stderr));
+    }
+
+    // 2. Squash merge
+    let output = Command::new("git")
+        .args(["-C", &repo_path, "merge", "--squash", &branch_name])
+        .output()
+        .map_err(|e| format!("Failed to run git merge --squash: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(format!("git merge --squash failed: {}", stderr));
+    }
+
+    // 3. Commit (silently succeed if nothing to commit)
+    let commit_msg = format!("Merge branch '{}' (squash)", branch_name);
+    let output = Command::new("git")
+        .args(["-C", &repo_path, "commit", "-m", &commit_msg])
+        .output()
+        .map_err(|e| format!("Failed to run git commit: {}", e))?;
+
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        // "nothing to commit" is not an error
+        if !stdout.contains("nothing to commit") && !stderr.contains("nothing to commit") {
+            return Err(format!("git commit failed: {}", stderr));
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn git_delete_branch(repo_path: String, branch_name: String) -> Result<(), String> {
     let output = Command::new("git")
         .args(["-C", &repo_path, "branch", "-D", &branch_name])

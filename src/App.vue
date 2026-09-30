@@ -27,7 +27,7 @@ import { getVersion } from '@tauri-apps/api/app'
 import { open as openDialog, ask } from '@tauri-apps/plugin-dialog'
 
 const terminalStore = useTerminalStore()
-const { updateInfo, isChecking, updateAvailable, checkForUpdates } = useUpdater()
+const { updateInfo, isChecking, updateAvailable, checkForUpdates, reset: resetUpdater } = useUpdater()
 const showUpdateDialog = ref(false)
 const dismissProgressBar = ref(false)
 const showWhatsNew = ref(false)
@@ -133,6 +133,13 @@ const handleDismissVersion = () => {
     localStorage.setItem('materm_dismissed_update_version', updateInfo.value.version)
     console.log('[App] Dismissed update version:', updateInfo.value.version)
   }
+}
+
+// Dismiss progress bar and reset updater state so it won't re-appear this session
+const handleDismissProgressBar = () => {
+  dismissProgressBar.value = true
+  resetUpdater()
+  console.log('[App] Update progress bar dismissed, updater state reset for this session')
 }
 
 // Studio project bar: window controls & project management
@@ -511,7 +518,7 @@ onUnmounted(() => {
               v-show="branch.id === terminalStore.activeStudioBranchId"
               class="branch-view"
             >
-              <div class="branch-view-toolbar">
+              <div v-if="branch.status !== 'merged'" class="branch-view-toolbar">
                 <button
                   class="view-toggle-btn"
                   :class="{ active: branch.viewMode !== 'terminal' }"
@@ -524,11 +531,15 @@ onUnmounted(() => {
                 >{{ $t('studio.agent.terminalView') }}</button>
               </div>
 
-              <div v-show="branch.viewMode !== 'terminal'" class="agent-view">
-                <agent-panel :cwd="branch.worktreePath" />
+              <div v-show="branch.status === 'merged' || branch.viewMode !== 'terminal'" class="agent-view">
+                <agent-panel
+                  :cwd="branch.worktreePath"
+                  :room-id="branch.id"
+                  :read-only="branch.status === 'merged'"
+                />
               </div>
 
-              <div v-show="branch.viewMode === 'terminal'" class="terminal-view">
+              <div v-show="branch.status !== 'merged' && branch.viewMode === 'terminal'" class="terminal-view">
                 <split-container
                   v-if="branch.sessionId"
                   :node="{
@@ -579,7 +590,7 @@ onUnmounted(() => {
     <!-- Update Progress Bar (background download) -->
     <update-progress-bar
       v-if="!dismissProgressBar"
-      @dismiss="dismissProgressBar = true"
+      @dismiss="handleDismissProgressBar"
     />
 
     <!-- Speech Recognition Indicator -->

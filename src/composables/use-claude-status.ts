@@ -17,6 +17,7 @@ export interface ClaudeUsage {
   cacheWriteTokens: number | null
   cost: number | null
   contextPercent: number | null
+  toolUses: number | null
 }
 
 export interface ClaudeStatus {
@@ -59,6 +60,7 @@ export function useClaudeStatus() {
     cacheWriteTokens: metrics.value.cacheWriteTokens ?? null,
     cost: metrics.value.cost ?? null,
     contextPercent: metrics.value.contextPercent ?? null,
+    toolUses: metrics.value.toolUses ?? null,
   }))
 
   // Computed helpers
@@ -77,11 +79,17 @@ export function useClaudeStatus() {
 
   // Wrapper methods for backwards compatibility
   const startSession = (sid: string) => {
+    _parser.resetToolUses()
     startTask(sid, 'claude')
   }
 
   const processOutput = (sid: string, raw: string) => {
     processTaskOutput(sid, raw)
+    // Sync tool use count from parser into metrics
+    const toolUses = _parser.getToolUses()
+    if (toolUses > 0) {
+      metrics.value = { ...metrics.value, toolUses }
+    }
   }
 
   const endSession = () => {

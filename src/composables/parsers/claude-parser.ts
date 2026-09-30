@@ -10,6 +10,7 @@ export interface ClaudeMetrics {
   cacheWriteTokens: number | null
   cost: number | null
   contextPercent: number | null
+  toolUses: number | null
 }
 
 /**
@@ -17,6 +18,10 @@ export interface ClaudeMetrics {
  */
 export class ClaudeOutputParser implements OutputParser<ClaudeMetrics> {
   private spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+  // Known Claude Code tool names
+  private toolNames = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'Task', 'TodoWrite', 'WebFetch', 'WebSearch', 'NotebookEdit', 'AskUserQuestion']
+  private _toolUses = 0
+  private _lastToolAction = ''
 
   /**
    * Strip ANSI escape codes and control characters
@@ -67,20 +72,52 @@ export class ClaudeOutputParser implements OutputParser<ClaudeMetrics> {
    * Parse current action from spinner or bullet lines
    */
   parseAction(line: string): string | null {
+    let action: string | null = null
+
     // Check for spinner characters
     for (const ch of this.spinnerChars) {
       if (line.includes(ch)) {
-        return line.replace(ch, '').trim()
+        action = line.replace(ch, '').trim()
+        break
       }
     }
 
     // Claude Code bullet action lines: "● ToolName..."
-    const bulletMatch = line.match(/^[●•]\s+(.+)/)
-    if (bulletMatch) {
-      return bulletMatch[1].trim()
+    if (!action) {
+      const bulletMatch = line.match(/^[●•]\s+(.+)/)
+      if (bulletMatch) {
+        action = bulletMatch[1].trim()
+      }
     }
 
-    return null
+    // Count tool uses: detect when a new tool invocation starts
+    if (action) {
+      const toolMatch = action.match(/^(\w+)\s/)
+      if (toolMatch && this.toolNames.includes(toolMatch[1])) {
+        const toolAction = action
+        if (toolAction !== this._lastToolAction) {
+          this._lastToolAction = toolAction
+          this._toolUses++
+        }
+      }
+    }
+
+    return action
+  }
+
+  /**
+   * Get current tool use count
+   */
+  getToolUses(): number {
+    return this._toolUses
+  }
+
+  /**
+   * Reset tool use counter (called when starting a new session)
+   */
+  resetToolUses(): void {
+    this._toolUses = 0
+    this._lastToolAction = ''
   }
 
   /**

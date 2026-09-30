@@ -103,6 +103,7 @@ export interface StudioBranch {
   paneId: string            // pane ID
   createdAt: number
   viewMode: 'agent' | 'terminal'  // which view is shown for this branch
+  status: 'active' | 'merged'     // branch lifecycle status
 }
 
 export interface GitFileStatus {
@@ -192,6 +193,12 @@ export const useTerminalStore = defineStore("terminal", {
     tabNotifications: [] as string[],
     // Git panel loading flag (studio mode)
     studioGitLoading: false,
+    // Agent status per branch (written by agent-panel watcher)
+    agentStatuses: {} as Record<string, 'busy' | 'waiting' | 'done'>,
+    // System notification toggles (persisted via localStorage)
+    notificationsEnabled: localStorage.getItem('materm_notifications_enabled') !== 'false',
+    notifyOnAgentWaiting: localStorage.getItem('materm_notify_agent_waiting') !== 'false',
+    notifyOnAgentDone: localStorage.getItem('materm_notify_agent_done') !== 'false',
   }),
 
   getters: {
@@ -1104,6 +1111,37 @@ export const useTerminalStore = defineStore("terminal", {
       this.studioTabs.push(newTab)
       this.activeStudioTabId = tabId
       this.recordRecentProject(projectPath, info.repo_name)
+
+      // Load merged chat rooms from DB as read-only branches
+      try {
+        const rooms = await invoke<Array<{
+          id: string
+          projectPath: string
+          branchName: string
+          worktreePath: string
+          status: string
+          createdAt: number
+          mergedAt: number | null
+        }>>('db_get_rooms', { projectPath })
+        for (const room of rooms.filter(r => r.status === 'merged')) {
+          newTab.branches.push({
+            id: room.id,
+            name: room.branchName,
+            worktreePath: room.worktreePath,
+            sessionId: null,
+            paneId: `pane_merged_${room.id}`,
+            createdAt: room.createdAt,
+            viewMode: 'agent',
+            status: 'merged',
+          })
+        }
+      } catch (e) {
+        console.warn('[Studio] Failed to load merged rooms:', e)
+      }
+
+      // Auto-create the default branch as a fixed workspace entry
+      await this.createStudioBranch(info.default_branch)
+
       console.log(`[Studio] Added project ${info.repo_name}`)
     },
 
@@ -1213,11 +1251,25 @@ export const useTerminalStore = defineStore("terminal", {
           paneId,
           createdAt: Date.now(),
           viewMode: 'agent',
+          status: 'active',
         }
 
         tab.branches.push(branch)
         tab.activeBranchId = branchId
         this.refreshAllGitInfo()
+
+        // Persist chat room to SQLite
+        invoke('db_create_room', {
+          room: {
+            id: branchId,
+            projectPath: project.path,
+            branchName,
+            worktreePath: effectivePath,
+            status: 'active',
+            createdAt: branch.createdAt,
+            mergedAt: null,
+          }
+        }).catch(e => console.warn('[Studio] Failed to create chat room:', e))
 
         console.log(`[Studio] Created branch ${branchName} with worktree at ${worktreePath}`)
       } catch (error) {
@@ -1232,6 +1284,9 @@ export const useTerminalStore = defineStore("terminal", {
 
       const branch = tab.branches.find(b => b.id === branchId)
       if (!branch) return
+
+      // Default branch is pinned and cannot be deleted
+      if (branch.name === tab.project.defaultBranch) return
 
       try {
         // @ts-ignore
@@ -1253,12 +1308,80 @@ export const useTerminalStore = defineStore("terminal", {
         console.error(`[Studio] Failed to remove branch ${branch.name}:`, error)
       }
 
+      // Delete chat room from SQLite
+      invoke('db_delete_room', { roomId: branchId })
+        .catch(e => console.warn('[Studio] Failed to delete chat room:', e))
+
       tab.branches = tab.branches.filter(b => b.id !== branchId)
       if (tab.activeBranchId === branchId) {
         tab.activeBranchId = tab.branches[0]?.id || null
       }
 
       console.log(`[Studio] Removed branch ${branch.name}`)
+    },
+
+    async mergeStudioBranch(branchId: string) {
+      const tab = this.activeStudioTab as StudioTab | undefined
+      if (!tab) return
+
+      const branch = tab.branches.find(b => b.id === branchId)
+      if (!branch) return
+
+      // Cannot merge default branch or already merged branches
+      if (branch.name === tab.project.defaultBranch) return
+      if (branch.status === 'merged') return
+
+      try {
+        // @ts-ignore
+        if (!window.__TAURI_INTERNALS__) return
+
+        // 1. Close PTY session
+        if (branch.sessionId) {
+          await invoke('pty_close', { sessionId: branch.sessionId })
+        }
+
+        // 2. Squash merge to default branch
+        await invoke('git_squash_merge', {
+          repoPath: tab.project.path,
+          branchName: branch.name,
+          defaultBranch: tab.project.defaultBranch,
+        })
+
+        // 3. Remove worktree and delete branch
+        await invoke('git_remove_worktree', {
+          repoPath: tab.project.path,
+          worktreePath: branch.worktreePath,
+          deleteBranch: false,
+        })
+        await invoke('git_delete_branch', {
+          repoPath: tab.project.path,
+          branchName: branch.name,
+        })
+
+        // 4. Update DB status
+        const mergedAt = Date.now()
+        await invoke('db_update_room_status', {
+          roomId: branchId,
+          status: 'merged',
+          mergedAt,
+        })
+
+        // 5. Update local state
+        branch.status = 'merged'
+        branch.sessionId = null
+
+        // 6. Switch to default branch
+        const defaultBranch = tab.branches.find(b => b.name === tab.project.defaultBranch)
+        if (defaultBranch) {
+          tab.activeBranchId = defaultBranch.id
+        }
+
+        this.refreshAllGitInfo()
+        console.log(`[Studio] Merged branch ${branch.name}`)
+      } catch (error) {
+        console.error(`[Studio] Failed to merge branch ${branch.name}:`, error)
+        throw error
+      }
     },
 
     setActiveStudioBranch(branchId: string) {

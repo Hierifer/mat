@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTerminalStore } from '@/stores/terminal-store'
 import MarkdownIt from 'markdown-it'
@@ -7,6 +7,7 @@ import { useAgentSession, type AgentAttachment, type AgentTimelineItem } from '@
 import IconFont from '@/components/ui/icon-font.vue'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
+import { useNotification } from '@/composables/use-notification'
 
 // html: false escapes raw HTML from the model output (XSS-safe)
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
@@ -17,17 +18,118 @@ function renderMarkdown(text: string): string {
 
 const props = defineProps<{
   cwd: string
+  roomId?: string
+  readOnly?: boolean
 }>()
 
 const { t } = useI18n()
 const store = useTerminalStore()
-const agent = useAgentSession()
+const { notify } = useNotification()
+const roomIdRef = computed(() => props.roomId ?? null)
+const agent = useAgentSession(roomIdRef)
 
 const isLightTheme = computed(() => store.currentThemeName.includes('Light'))
 
 const inputText = ref('')
 const timelineRef = ref<HTMLElement | null>(null)
 const expandedTools = ref<Set<string>>(new Set())
+
+// AskUserQuestion interactive card helpers
+interface AskQuestion {
+  question: string
+  header?: string
+  options: { label: string; description?: string }[]
+  multiSelect?: boolean
+}
+
+function isAskUserQuestion(item: AgentTimelineItem): boolean {
+  return item.kind === 'tool' && item.tool?.name === 'AskUserQuestion'
+}
+
+function getAskQuestions(item: AgentTimelineItem): AskQuestion[] {
+  if (!isAskUserQuestion(item)) return []
+  const input = item.tool?.input
+  if (!input || !Array.isArray(input.questions)) return []
+  return input.questions as AskQuestion[]
+}
+
+function isAskPending(item: AgentTimelineItem): boolean {
+  return isAskUserQuestion(item) && item.tool?.result === null
+}
+
+// Track selected answers per AskUserQuestion item
+const askSelections = ref<Record<string, Record<number, Set<number>>>>({})  // itemId -> questionIdx -> selected option indices
+const askOtherTexts = ref<Record<string, Record<number, string>>>({})       // itemId -> questionIdx -> custom text
+const askUsingOther = ref<Record<string, Record<number, boolean>>>({})      // itemId -> questionIdx -> using other input
+
+function ensureAskState(itemId: string, qIdx: number) {
+  if (!askSelections.value[itemId]) askSelections.value[itemId] = {}
+  if (!askSelections.value[itemId][qIdx]) askSelections.value[itemId][qIdx] = new Set()
+  if (!askOtherTexts.value[itemId]) askOtherTexts.value[itemId] = {}
+  if (!askOtherTexts.value[itemId][qIdx]) askOtherTexts.value[itemId][qIdx] = ''
+  if (!askUsingOther.value[itemId]) askUsingOther.value[itemId] = {}
+  if (askUsingOther.value[itemId][qIdx] === undefined) askUsingOther.value[itemId][qIdx] = false
+}
+
+function toggleAskOption(itemId: string, qIdx: number, optIdx: number, multiSelect: boolean) {
+  ensureAskState(itemId, qIdx)
+  const sel = askSelections.value[itemId][qIdx]
+  if (multiSelect) {
+    if (sel.has(optIdx)) sel.delete(optIdx)
+    else sel.add(optIdx)
+  } else {
+    sel.clear()
+    sel.add(optIdx)
+  }
+  // Deselect "Other" when picking a normal option
+  askUsingOther.value[itemId][qIdx] = false
+}
+
+function toggleAskOther(itemId: string, qIdx: number, multiSelect: boolean) {
+  ensureAskState(itemId, qIdx)
+  if (!multiSelect) {
+    askSelections.value[itemId][qIdx].clear()
+  }
+  askUsingOther.value[itemId][qIdx] = !askUsingOther.value[itemId][qIdx]
+}
+
+function isAskOptionSelected(itemId: string, qIdx: number, optIdx: number): boolean {
+  return askSelections.value[itemId]?.[qIdx]?.has(optIdx) ?? false
+}
+
+function hasAskSelection(itemId: string, questions: AskQuestion[]): boolean {
+  for (let qIdx = 0; qIdx < questions.length; qIdx++) {
+    const sel = askSelections.value[itemId]?.[qIdx]
+    const usingOther = askUsingOther.value[itemId]?.[qIdx]
+    if (usingOther) {
+      if ((askOtherTexts.value[itemId]?.[qIdx] ?? '').trim()) return true
+    } else if (sel && sel.size > 0) {
+      return true
+    }
+  }
+  return false
+}
+
+async function submitAskAnswer(item: AgentTimelineItem) {
+  const questions = getAskQuestions(item)
+  const parts: string[] = []
+  for (let qIdx = 0; qIdx < questions.length; qIdx++) {
+    const q = questions[qIdx]
+    const usingOther = askUsingOther.value[item.id]?.[qIdx]
+    if (usingOther) {
+      const text = (askOtherTexts.value[item.id]?.[qIdx] ?? '').trim()
+      if (text) parts.push(text)
+    } else {
+      const sel = askSelections.value[item.id]?.[qIdx]
+      if (sel) {
+        const labels = Array.from(sel).map(i => q.options[i]?.label).filter(Boolean)
+        if (labels.length) parts.push(labels.join(', '))
+      }
+    }
+  }
+  if (parts.length === 0) return
+  await agent.send(parts.join('\n'))
+}
 
 interface PendingFile {
   path: string
@@ -37,7 +139,22 @@ interface PendingFile {
 }
 
 const pendingFiles = ref<PendingFile[]>([])
+const pendingFilesExpanded = ref(false)
 const isDragOver = ref(false)
+
+const visiblePendingFiles = computed(() => {
+  if (pendingFilesExpanded.value || pendingFiles.value.length <= 3) return pendingFiles.value
+  return pendingFiles.value.slice(0, 3)
+})
+
+const hiddenPendingCount = computed(() => {
+  if (pendingFilesExpanded.value || pendingFiles.value.length <= 3) return 0
+  return pendingFiles.value.length - 3
+})
+
+watch(() => pendingFiles.value.length, (len) => {
+  if (len <= 3) pendingFilesExpanded.value = false
+})
 
 function mimeFromExt(name: string): string {
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
@@ -127,6 +244,41 @@ async function handleFilePicker() {
     pendingFiles.value.push({ path: filePath, mediaType, name, previewUrl })
   }
 }
+
+// Sync agent busy/waiting status to the global store for sidebar breathing dot
+// and send system notifications on status transitions
+let prevStatus: string | null = null
+
+watch(
+  [agent.isBusy, agent.isRunning, agent.exitCode],
+  ([busy, running, exit]) => {
+    if (!props.roomId) return
+
+    let status: 'busy' | 'waiting' | 'done'
+    if (exit !== null || !running) {
+      status = 'done'
+    } else if (busy) {
+      status = 'busy'
+    } else {
+      status = 'waiting'
+    }
+
+    store.agentStatuses[props.roomId] = status
+
+    // Send system notifications on relevant transitions
+    if (store.notificationsEnabled && prevStatus !== null && prevStatus !== status) {
+      const branchName = store.studioBranches.find(b => b.id === props.roomId)?.name ?? ''
+      if (status === 'waiting' && prevStatus === 'busy' && store.notifyOnAgentWaiting) {
+        notify({ title: t('studio.agent.notifyWaitingTitle', 'Agent 等待输入'), body: branchName })
+      } else if (status === 'done' && store.notifyOnAgentDone) {
+        notify({ title: t('studio.agent.notifyDoneTitle', 'Agent 任务完成'), body: branchName })
+      }
+    }
+
+    prevStatus = status
+  },
+  { immediate: true }
+)
 
 const statusText = computed(() => {
   if (agent.exitCode.value !== null) return t('studio.agent.sessionExited')
@@ -237,6 +389,26 @@ async function handleSend() {
   await agent.send(text, attachments.length > 0 ? attachments : undefined)
 }
 
+// Guard against IME composition Enter: some input methods (e.g. Chinese on
+// macOS) set isComposing=false on the compositionend event, and the subsequent
+// Enter keydown that confirmed the candidate arrives with isComposing already
+// false. We track composition state manually and use a cooldown to suppress
+// the Enter keydown that immediately follows compositionend.
+let composing = false
+let justComposed = false
+let composeCooldown: ReturnType<typeof setTimeout> | null = null
+
+function handleCompositionStart() {
+  composing = true
+}
+
+function handleCompositionEnd() {
+  composing = false
+  justComposed = true
+  if (composeCooldown) clearTimeout(composeCooldown)
+  composeCooldown = setTimeout(() => { justComposed = false }, 300)
+}
+
 function handleKeydown(e: KeyboardEvent) {
   if (showSlashPopup.value) {
     const count = slashMatches.value.length
@@ -250,7 +422,7 @@ function handleKeydown(e: KeyboardEvent) {
       slashSelectedIndex.value = (slashSelectedIndex.value - 1 + count) % count
       return
     }
-    if (e.key === 'Tab' || (e.key === 'Enter' && !e.isComposing)) {
+    if (e.key === 'Tab' || (e.key === 'Enter' && !e.isComposing && !composing && !justComposed)) {
       e.preventDefault()
       const cmd = slashMatches.value[slashSelectedIndex.value]
       if (cmd) applySlashCommand(cmd)
@@ -262,7 +434,7 @@ function handleKeydown(e: KeyboardEvent) {
       return
     }
   }
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !composing && !justComposed) {
     e.preventDefault()
     handleSend()
   }
@@ -272,7 +444,19 @@ async function handleRestart() {
   await agent.restart(props.cwd)
 }
 
-onMounted(() => {
+onMounted(async () => {
+  if (props.readOnly) {
+    agent.readOnly.value = true
+    if (props.roomId) {
+      await agent.loadHistory(props.roomId)
+    }
+    return
+  }
+
+  // Load history first, then start agent
+  if (props.roomId) {
+    await agent.loadHistory(props.roomId)
+  }
   agent.start(props.cwd).catch((error) => {
     console.error('[Agent] Failed to start:', error)
   })
@@ -288,14 +472,15 @@ onUnmounted(() => {
     <!-- Header -->
     <div class="agent-header">
       <div class="agent-header-left">
-        <span class="agent-status-dot" :class="{ running: agent.isRunning.value, busy: agent.isBusy.value }" />
+        <span class="agent-status-dot" :class="{ running: agent.isRunning.value, busy: agent.isBusy.value, waiting: agent.isRunning.value && !agent.isBusy.value }" />
         <span class="agent-title">Claude Code</span>
         <span v-if="agent.model.value" class="agent-model">{{ agent.model.value }}</span>
+        <span class="agent-badge-skip">skip-permissions</span>
       </div>
       <div class="agent-header-right">
         <span v-if="costText" class="agent-cost">{{ costText }}</span>
         <span v-if="statusText" class="agent-status">{{ statusText }}</span>
-        <button class="agent-restart-btn" :title="t('studio.agent.restart')" @click="handleRestart">
+        <button v-if="!props.readOnly" class="agent-restart-btn" :title="t('studio.agent.restart')" @click="handleRestart">
           <icon-font name="refresh" :size="12" />
         </button>
       </div>
@@ -314,7 +499,60 @@ onUnmounted(() => {
           <div class="tool-group">
             <div class="tool-group-list">
               <template v-for="item in block.items" :key="item.id">
-                <div v-if="item.tool" class="tool-row" :class="{ 'tool-error': item.tool.isError }" @click="toggleTool(item.id)">
+                <!-- AskUserQuestion: interactive card -->
+                <div v-if="isAskUserQuestion(item)" class="ask-card">
+                  <div v-for="(q, qIdx) in getAskQuestions(item)" :key="qIdx" class="ask-question">
+                    <div v-if="q.header" class="ask-header">{{ q.header }}</div>
+                    <div class="ask-question-text">{{ q.question }}</div>
+                    <div class="ask-options">
+                      <button
+                        v-for="(opt, oIdx) in q.options"
+                        :key="oIdx"
+                        class="ask-option-btn"
+                        :class="{ selected: isAskOptionSelected(item.id, qIdx, oIdx) }"
+                        :disabled="!isAskPending(item)"
+                        @click="toggleAskOption(item.id, qIdx, oIdx, !!q.multiSelect)"
+                      >
+                        <span class="ask-check">{{ q.multiSelect ? (isAskOptionSelected(item.id, qIdx, oIdx) ? '☑' : '☐') : (isAskOptionSelected(item.id, qIdx, oIdx) ? '◉' : '○') }}</span>
+                        <span class="ask-option-content">
+                          <span class="ask-option-label">{{ opt.label }}</span>
+                          <span v-if="opt.description" class="ask-option-desc">{{ opt.description }}</span>
+                        </span>
+                      </button>
+                      <!-- Other (free input) -->
+                      <button
+                        class="ask-option-btn"
+                        :class="{ selected: askUsingOther[item.id]?.[qIdx] }"
+                        :disabled="!isAskPending(item)"
+                        @click="toggleAskOther(item.id, qIdx, !!q.multiSelect)"
+                      >
+                        <span class="ask-check">{{ q.multiSelect ? (askUsingOther[item.id]?.[qIdx] ? '☑' : '☐') : (askUsingOther[item.id]?.[qIdx] ? '◉' : '○') }}</span>
+                        <span class="ask-option-label">Other</span>
+                      </button>
+                      <input
+                        v-if="askUsingOther[item.id]?.[qIdx]"
+                        v-model="askOtherTexts[item.id][qIdx]"
+                        class="ask-other-input"
+                        placeholder="Type your answer..."
+                        :disabled="!isAskPending(item)"
+                        @keydown.enter.prevent="submitAskAnswer(item)"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    v-if="isAskPending(item)"
+                    class="ask-submit-btn"
+                    :disabled="!hasAskSelection(item.id, getAskQuestions(item))"
+                    @click="submitAskAnswer(item)"
+                  >Submit</button>
+                  <div v-else-if="item.tool?.result" class="ask-answered">
+                    <icon-font name="check" :size="11" />
+                    <span>{{ item.tool.result }}</span>
+                  </div>
+                </div>
+
+                <!-- Regular tool row -->
+                <div v-else-if="item.tool" class="tool-row" :class="{ 'tool-error': item.tool.isError }" @click="toggleTool(item.id)">
                   <div class="tool-header">
                     <icon-font class="tool-chevron" :class="{ expanded: expandedTools.has(item.id) }" name="fold" :size="9" />
                     <span class="tool-name">{{ item.tool.name }}</span>
@@ -392,19 +630,13 @@ onUnmounted(() => {
           v-model="inputText"
           class="agent-input"
           rows="2"
-          :placeholder="agent.isRunning.value ? t('studio.agent.inputPlaceholder') : t('studio.agent.sessionExited')"
-          :disabled="!agent.isRunning.value"
+          :placeholder="props.readOnly ? t('studio.agent.archived', '聊天已归档（只读）') : (agent.isRunning.value ? t('studio.agent.inputPlaceholder') : t('studio.agent.sessionExited'))"
+          :disabled="props.readOnly || !agent.isRunning.value"
           @keydown="handleKeydown"
+          @compositionstart="handleCompositionStart"
+          @compositionend="handleCompositionEnd"
           @paste="handlePaste"
         />
-        <button
-          class="agent-attach-btn"
-          :title="t('studio.agent.attach', 'Attach file')"
-          :disabled="!agent.isRunning.value"
-          @click="handleFilePicker"
-        >
-          <icon-font name="add" :size="14" />
-        </button>
       </div>
     </div>
   </div>
@@ -459,9 +691,19 @@ onUnmounted(() => {
   background: #4caf50;
 }
 
+.agent-status-dot.waiting {
+  background: #2196f3;
+  animation: breathe-blue 2s ease-in-out infinite;
+}
+
 .agent-status-dot.busy {
   background: #ff9800;
   animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes breathe-blue {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.1); }
 }
 
 @keyframes pulse {
@@ -476,6 +718,23 @@ onUnmounted(() => {
 .agent-model {
   color: #888;
   font-size: 11px;
+}
+
+.agent-badge-skip {
+  font-size: 10px;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  color: #e8ab6a;
+  background: rgba(232, 171, 106, 0.12);
+  border: 1px solid rgba(232, 171, 106, 0.25);
+  border-radius: 3px;
+  padding: 1px 6px;
+  line-height: 1.3;
+}
+
+.light-theme .agent-badge-skip {
+  color: #b5651d;
+  background: rgba(181, 101, 29, 0.08);
+  border-color: rgba(181, 101, 29, 0.2);
 }
 
 .agent-cost {
@@ -867,7 +1126,7 @@ onUnmounted(() => {
 .agent-input-area {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   padding: 10px 12px;
   border-top: 1px solid #333;
   flex-shrink: 0;
@@ -963,40 +1222,6 @@ onUnmounted(() => {
 
 .agent-input-row .agent-input {
   flex: 1;
-}
-
-.agent-attach-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: transparent;
-  border: 1px solid #3c3c3c;
-  border-radius: 6px;
-  color: #888;
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.agent-attach-btn:hover {
-  background: #37373d;
-  color: #fff;
-}
-
-.agent-attach-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.light-theme .agent-attach-btn {
-  border-color: #ccc;
-}
-
-.light-theme .agent-attach-btn:hover {
-  background: #e0e0e0;
-  color: #000;
 }
 
 /* Drag over indicator */
@@ -1108,6 +1333,183 @@ onUnmounted(() => {
 
 .light-theme .msg-attachment-name {
   color: #777;
+}
+
+/* AskUserQuestion card */
+.ask-card {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ask-question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ask-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #4fc1ff;
+  background: rgba(79, 193, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 3px;
+  align-self: flex-start;
+}
+
+.light-theme .ask-header {
+  color: #0066b8;
+  background: rgba(0, 102, 184, 0.08);
+}
+
+.ask-question-text {
+  font-size: 13px;
+  color: #d4d4d4;
+  line-height: 1.4;
+}
+
+.light-theme .ask-question-text {
+  color: #333;
+}
+
+.ask-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ask-option-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #2d2d30;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #d4d4d4;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.ask-option-btn:hover:not(:disabled) {
+  border-color: #007acc;
+  background: #37373d;
+}
+
+.ask-option-btn.selected {
+  border-color: #007acc;
+  background: rgba(0, 122, 204, 0.15);
+}
+
+.ask-option-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.light-theme .ask-option-btn {
+  background: #f5f5f5;
+  border-color: #ddd;
+  color: #333;
+}
+
+.light-theme .ask-option-btn:hover:not(:disabled) {
+  background: #e8e8e8;
+  border-color: #007acc;
+}
+
+.light-theme .ask-option-btn.selected {
+  background: rgba(0, 122, 204, 0.08);
+  border-color: #007acc;
+}
+
+.ask-check {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: #888;
+}
+
+.ask-option-btn.selected .ask-check {
+  color: #007acc;
+}
+
+.ask-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ask-option-label {
+  font-weight: 500;
+}
+
+.ask-option-desc {
+  font-size: 11px;
+  color: #888;
+  line-height: 1.3;
+}
+
+.light-theme .ask-option-desc {
+  color: #666;
+}
+
+.ask-other-input {
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+  margin-top: 2px;
+}
+
+.ask-other-input:focus {
+  border-color: #007acc;
+}
+
+.light-theme .ask-other-input {
+  background: #fff;
+  border-color: #ccc;
+  color: #333;
+}
+
+.ask-submit-btn {
+  align-self: flex-end;
+  background: #007acc;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.ask-submit-btn:hover {
+  opacity: 0.9;
+}
+
+.ask-submit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ask-answered {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #4caf50;
+  padding: 4px 0;
 }
 
 </style>
