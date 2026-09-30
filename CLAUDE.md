@@ -17,6 +17,16 @@ Tauri v2 terminal app (Rust backend + Vue 3 frontend, pnpm).
    git push origin main --tags
    ```
 
+## 项目文档
+
+修改功能前先阅读 `docs/` 下的对应文档，了解现有设计再动手：
+
+- `docs/STUDIO_MODE.md` — Studio 模式（项目 + 分支工作区 + Agent）
+- `docs/AUTO_UPDATE_DESIGN.md` — 自动更新系统
+- `docs/NOTIFICATIONS.md` — 通知系统
+- `docs/SPEECH_RECOGNITION.md` — 语音识别
+- `docs/CLAUDE_COMMAND_MONITORING.md` — Claude 命令监控
+
 ## 常用命令
 
 - `pnpm install` — 安装依赖（项目用 pnpm，不要用 npm install，会生成多余的 package-lock.json 并升级依赖）
