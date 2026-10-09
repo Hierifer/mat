@@ -102,7 +102,7 @@ export interface StudioBranch {
   sessionId: string | null  // PTY session ID (lazy-created)
   paneId: string            // pane ID
   createdAt: number
-  viewMode: 'agent' | 'terminal'  // which view is shown for this branch
+  viewMode: 'agent' | 'terminal' | 'editor'  // which view is shown for this branch
   status: 'active' | 'merged'     // branch lifecycle status
   claudeSessionId?: string | null  // Claude Code session ID (for --resume)
 }
@@ -1371,7 +1371,7 @@ export const useTerminalStore = defineStore("terminal", {
       }
     },
 
-    setStudioBranchViewMode(branchId: string, mode: 'agent' | 'terminal') {
+    setStudioBranchViewMode(branchId: string, mode: 'agent' | 'terminal' | 'editor') {
       const tab = this.activeStudioTab as StudioTab | undefined
       const branch = tab?.branches.find(b => b.id === branchId)
       if (branch) {
