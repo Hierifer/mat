@@ -119,6 +119,7 @@ export interface GitCommitInfo {
   author: string
   timestamp: number
   parent_count: number
+  refs: string[]
 }
 
 export interface GitStashEntry {

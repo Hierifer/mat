@@ -406,7 +406,7 @@ function handleCompositionEnd() {
   composing = false
   justComposed = true
   if (composeCooldown) clearTimeout(composeCooldown)
-  composeCooldown = setTimeout(() => { justComposed = false }, 300)
+  composeCooldown = setTimeout(() => { justComposed = false }, 50)
 }
 
 function handleKeydown(e: KeyboardEvent) {

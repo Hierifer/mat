@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useI18n } from 'vue-i18n'
 import StudioGitPanel from './studio-git-panel.vue'
@@ -8,6 +8,24 @@ import { formatTime } from '@/utils/format-time'
 
 const store = useTerminalStore()
 const { t } = useI18n()
+
+// Auto-refresh git info every 5 seconds
+let gitRefreshTimer: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  gitRefreshTimer = setInterval(() => {
+    if (store.studioProject && store.activeStudioBranchId) {
+      store.refreshAllGitInfo()
+    }
+  }, 5000)
+})
+
+onUnmounted(() => {
+  if (gitRefreshTimer) {
+    clearInterval(gitRefreshTimer)
+    gitRefreshTimer = null
+  }
+})
 
 const isLightTheme = computed(() => {
   return store.currentThemeName.includes('Light')
@@ -113,15 +131,6 @@ const handleMergeBranch = async (branchId: string, event: Event) => {
   }
 }
 
-const isRefreshing = ref(false)
-const handleRefresh = async () => {
-  isRefreshing.value = true
-  try {
-    await store.refreshAllGitInfo()
-  } finally {
-    setTimeout(() => { isRefreshing.value = false }, 400)
-  }
-}
 
 </script>
 
@@ -138,9 +147,6 @@ const handleRefresh = async () => {
           <span class="default-branch">{{ store.studioProject.defaultBranch }}</span>
         </div>
       </div>
-      <button class="project-refresh-btn" :class="{ spinning: isRefreshing }" @click="handleRefresh" :title="t('studio.gitPanel.refresh')">
-        <icon-font name="refresh" :size="13" />
-      </button>
     </div>
 
     <!-- Branch list -->
@@ -260,35 +266,6 @@ const handleRefresh = async () => {
 .project-info-left {
   flex: 1;
   min-width: 0;
-}
-
-.project-refresh-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: #888;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.15s;
-}
-
-.project-refresh-btn:hover {
-  background: #37373d;
-  color: #fff;
-}
-
-.light-theme .project-refresh-btn:hover {
-  background: #e0e0e0;
-  color: #000;
-}
-
-.project-refresh-btn.spinning svg {
-  animation: spin 0.6s linear infinite;
 }
 
 .light-theme .project-info {

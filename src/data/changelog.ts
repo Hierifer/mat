@@ -8,6 +8,15 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.7.1': {
+    date: '2026-10-09',
+    features: [
+      'agent interrupt button, suggested replies, and native notifications',
+    ],
+    fixes: [
+      'studio sidebar layout — align status dots, show action buttons, cancel rename on blur',
+    ],
+  },
   '1.7.0': {
     date: '2026-09-30',
     features: [
@@ -97,14 +106,5 @@ export const changelog: Record<string, ChangelogEntry> = {
       'add preset layouts and terminal keyword search',
     ],
     fixes: [],
-  },
-  '1.2.6': {
-    date: '2026-05-29',
-    features: [
-      'add inactive pane brightness slider in settings',
-    ],
-    fixes: [
-      'move new tab button next to tab list',
-    ],
   },
 }

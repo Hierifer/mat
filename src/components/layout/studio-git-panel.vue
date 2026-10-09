@@ -10,6 +10,18 @@ const { t } = useI18n()
 
 const isLightTheme = computed(() => store.currentThemeName.includes('Light'))
 
+// Refresh
+const isRefreshing = ref(false)
+const handleRefresh = async (e: Event) => {
+  e.stopPropagation()
+  isRefreshing.value = true
+  try {
+    await store.refreshAllGitInfo()
+  } finally {
+    setTimeout(() => { isRefreshing.value = false }, 400)
+  }
+}
+
 // Section collapse state
 const changesOpen = ref(true)
 const stashesOpen = ref(true)
@@ -78,6 +90,9 @@ const statusColor = (status: string, staged: boolean): string => {
         <icon-font class="chevron" :class="{ open: changesOpen }" name="fold" :size="10" />
         <span class="section-title">{{ t('studio.gitPanel.status') }}</span>
         <span v-if="store.studioGitStatus.length" class="section-badge">{{ store.studioGitStatus.length }}</span>
+        <button class="section-refresh-btn" :class="{ spinning: isRefreshing }" @click="handleRefresh" :title="t('studio.gitPanel.refresh')">
+          <icon-font name="refresh" :size="11" />
+        </button>
       </div>
       <div v-if="changesOpen" class="section-content">
         <template v-if="store.studioGitStatus.length === 0">
@@ -166,6 +181,7 @@ const statusColor = (status: string, staged: boolean): string => {
         </template>
         <div v-else v-for="commit in store.studioGitLog" :key="commit.hash" class="commit-item">
           <span class="commit-hash">{{ commit.short_hash }}</span>
+          <span v-for="r in commit.refs" :key="r" class="commit-ref" :class="{ head: r === 'HEAD', remote: r.startsWith('origin/') }">{{ r }}</span>
           <span class="commit-message">{{ commit.message }}</span>
           <span class="commit-time">{{ formatTime(commit.timestamp, 's') }}</span>
         </div>
@@ -265,6 +281,41 @@ const statusColor = (status: string, staged: boolean): string => {
   border-radius: 8px;
   min-width: 16px;
   text-align: center;
+}
+
+.section-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.section-refresh-btn:hover {
+  background: #37373d;
+  color: #fff;
+}
+
+.light-theme .section-refresh-btn:hover {
+  background: #e0e0e0;
+  color: #000;
+}
+
+.section-refresh-btn.spinning :deep(svg) {
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .light-theme .section-badge {
@@ -503,6 +554,42 @@ const statusColor = (status: string, staged: boolean): string => {
 }
 
 .light-theme .commit-hash {
+  color: #0066cc;
+}
+
+/* Commit ref tags */
+.commit-ref {
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: rgba(115, 201, 145, 0.2);
+  color: #73c991;
+}
+
+.commit-ref.head {
+  background: rgba(226, 160, 82, 0.2);
+  color: #e2a052;
+}
+
+.commit-ref.remote {
+  background: rgba(86, 156, 214, 0.2);
+  color: #569cd6;
+}
+
+.light-theme .commit-ref {
+  background: rgba(40, 140, 70, 0.15);
+  color: #2e7d32;
+}
+
+.light-theme .commit-ref.head {
+  background: rgba(200, 130, 40, 0.15);
+  color: #b8651a;
+}
+
+.light-theme .commit-ref.remote {
+  background: rgba(0, 102, 204, 0.15);
   color: #0066cc;
 }
 

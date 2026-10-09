@@ -1,5 +1,6 @@
 use git2::{Repository, StatusOptions, Sort};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::process::Command;
 
 #[derive(Serialize)]
@@ -23,6 +24,7 @@ pub struct GitCommitInfo {
     pub author: String,
     pub timestamp: i64,
     pub parent_count: usize,
+    pub refs: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -188,6 +190,40 @@ pub fn git_log(path: String, limit: Option<usize>) -> Result<Vec<GitCommitInfo>,
     let repo = Repository::open(&path)
         .map_err(|e| format!("Failed to open repo: {}", e))?;
 
+    // Build a map from commit OID -> list of ref names (HEAD, branches, remotes)
+    let mut ref_map: HashMap<git2::Oid, Vec<String>> = HashMap::new();
+
+    // Mark HEAD
+    if let Ok(head) = repo.head() {
+        if let Some(oid) = head.target() {
+            ref_map.entry(oid).or_default().push("HEAD".to_string());
+        }
+    }
+
+    // Collect local branches (refs/heads/*)
+    if let Ok(refs) = repo.references_glob("refs/heads/*") {
+        for reference in refs.flatten() {
+            if let (Some(name), Some(oid)) = (reference.name(), reference.target()) {
+                let branch_name = name.strip_prefix("refs/heads/").unwrap_or(name).to_string();
+                ref_map.entry(oid).or_default().push(branch_name);
+            }
+        }
+    }
+
+    // Collect remote branches (refs/remotes/origin/*)
+    if let Ok(refs) = repo.references_glob("refs/remotes/origin/*") {
+        for reference in refs.flatten() {
+            if let (Some(name), Some(oid)) = (reference.name(), reference.target()) {
+                // Skip origin/HEAD
+                if name == "refs/remotes/origin/HEAD" {
+                    continue;
+                }
+                let remote_name = name.strip_prefix("refs/remotes/").unwrap_or(name).to_string();
+                ref_map.entry(oid).or_default().push(remote_name);
+            }
+        }
+    }
+
     let mut revwalk = repo.revwalk()
         .map_err(|e| format!("Failed to create revwalk: {}", e))?;
 
@@ -215,6 +251,7 @@ pub fn git_log(path: String, limit: Option<usize>) -> Result<Vec<GitCommitInfo>,
         let author = commit.author().name().unwrap_or("Unknown").to_string();
         let timestamp = commit.time().seconds();
         let parent_count = commit.parent_count();
+        let refs = ref_map.remove(&oid).unwrap_or_default();
 
         commits.push(GitCommitInfo {
             hash,
@@ -223,6 +260,7 @@ pub fn git_log(path: String, limit: Option<usize>) -> Result<Vec<GitCommitInfo>,
             author,
             timestamp,
             parent_count,
+            refs,
         });
     }
 
