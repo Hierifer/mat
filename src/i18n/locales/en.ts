@@ -211,6 +211,7 @@ export default {
     agent: {
       agentView: 'Agent',
       terminalView: 'Terminal',
+      editorView: 'Editor',
       inputPlaceholder: 'Message Claude Code — Enter to send, Shift+Enter for newline',
       send: 'Send',
       ready: 'Ready',

@@ -1,6 +1,7 @@
 mod agent;
 mod clipboard;
 mod db;
+mod fs_browser;
 mod git;
 mod pty;
 mod settings;
@@ -265,6 +266,10 @@ pub fn run() {
             agent::commands::agent_send,
             agent::commands::agent_interrupt,
             agent::commands::agent_kill,
+            // fs browser commands
+            fs_browser::fs_read_dir,
+            fs_browser::fs_read_file,
+            fs_browser::fs_write_file,
             // clipboard commands
             clipboard::save_clipboard_image,
             clipboard::read_file_bytes,
