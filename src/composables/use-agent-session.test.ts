@@ -57,7 +57,7 @@ describe('use-agent-session start', () => {
     expect(agent.agentId.value).toBe('ag_1')
     expect(agent.isRunning.value).toBe(true)
     const spawnCall = mockInvoke.mock.calls.find(c => c[0] === 'agent_spawn')!
-    expect(spawnCall[1]).toEqual({ cwd: '/repo/worktree' })
+    expect(spawnCall[1]).toEqual({ cwd: '/repo/worktree', resumeSessionId: null })
     expect(handlers.has('agent_event_ag_1')).toBe(true)
     expect(handlers.has('agent_stderr_ag_1')).toBe(true)
     expect(handlers.has('agent_exit_ag_1')).toBe(true)
