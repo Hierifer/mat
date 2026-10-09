@@ -8,6 +8,18 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.7.3': {
+    date: '2026-10-10',
+    features: [
+      'remove merge functionality (worktree does not support merge)',
+      'add file browser + Monaco editor tab to Studio mode',
+      'auto-resume agent session when process dies',
+    ],
+    fixes: [
+      'use nextTick focus instead of autofocus for branch rename input',
+      'update agent_spawn test assertion to include resumeSessionId',
+    ],
+  },
   '1.7.2': {
     date: '2026-10-09',
     features: [
@@ -90,19 +102,6 @@ export const changelog: Record<string, ChangelogEntry> = {
       'drop git2 https/ssh features to unblock CI openssl-sys build failure',
       'ensure terminal textarea focus on click and share claude status state',
       'prevent terminal scroll reset during Claude Code usage',
-    ],
-  },
-  '1.4.1': {
-    date: '2026-06-10',
-    features: [
-      'migrate speech recognition to DashScope with real-time streaming',
-      'add Alibaba Cloud speech recognition, manual update restart, and fix xterm scroll jump',
-      'add XTermManager for centralized terminal lifecycle and resource recycling',
-    ],
-    fixes: [
-      'skip update prompt when current version matches remote',
-      'request macOS folder access permissions on startup',
-      'add process plugin for relaunch ACL permission',
     ],
   },
 }
