@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useI18n } from 'vue-i18n'
 import StudioGitPanel from './studio-git-panel.vue'
@@ -36,10 +36,13 @@ const isCreatingBranch = ref(false)
 const newBranchName = ref('')
 const createError = ref('')
 
+const newBranchInputRef = ref<HTMLInputElement | null>(null)
+
 const startCreatingBranch = () => {
   isCreatingBranch.value = true
   newBranchName.value = ''
   createError.value = ''
+  nextTick(() => newBranchInputRef.value?.focus())
 }
 
 const cancelCreateBranch = () => {
@@ -74,9 +77,12 @@ const handleBranchInputKeydown = (e: KeyboardEvent) => {
 const editingBranchId = ref<string | null>(null)
 const editingBranchName = ref('')
 
+const editBranchInputRef = ref<HTMLInputElement | null>(null)
+
 const startEditingBranch = (branch: { id: string; name: string }) => {
   editingBranchId.value = branch.id
   editingBranchName.value = branch.name
+  nextTick(() => editBranchInputRef.value?.focus())
 }
 
 const cancelEditingBranch = () => {
@@ -147,12 +153,12 @@ const handleDeleteBranch = async (branchId: string, event: Event) => {
         <div class="branch-info">
           <input
             v-if="editingBranchId === branch.id && branch.status !== 'merged'"
+            ref="editBranchInputRef"
             v-model="editingBranchName"
             class="branch-name-input"
             @keydown="handleEditBranchKeydown"
             @blur="cancelEditingBranch"
             @click.stop
-            autofocus
           />
           <span v-else class="branch-name" :class="{ 'merged-name': branch.status === 'merged' }" @click.stop="branch.status !== 'merged' && startEditingBranch(branch)">{{ branch.name }}</span>
           <span class="branch-time">{{ formatTime(branch.createdAt) }}</span>
@@ -185,12 +191,12 @@ const handleDeleteBranch = async (branchId: string, event: Event) => {
       <!-- New branch input -->
       <div v-if="isCreatingBranch" class="new-branch-input-container">
         <input
+          ref="newBranchInputRef"
           v-model="newBranchName"
           class="new-branch-input"
           :placeholder="t('studio.branchNamePlaceholder')"
           @keydown="handleBranchInputKeydown"
           @blur="cancelCreateBranch"
-          autofocus
         />
         <div v-if="createError" class="create-error">{{ createError }}</div>
       </div>
