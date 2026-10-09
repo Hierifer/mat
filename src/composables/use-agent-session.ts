@@ -271,6 +271,16 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     }
   }
 
+  async function interrupt() {
+    if (!agentId.value || !isRunning.value || !isBusy.value) return
+    try {
+      await invoke('agent_interrupt', { agentId: agentId.value })
+      isBusy.value = false
+    } catch (error) {
+      console.warn('[Agent] Failed to interrupt:', error)
+    }
+  }
+
   async function stop() {
     for (const un of unlisteners.value) un()
     unlisteners.value = []
@@ -308,6 +318,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     readOnly,
     start,
     send,
+    interrupt,
     stop,
     restart,
     loadHistory,

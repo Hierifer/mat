@@ -220,6 +220,11 @@ export default {
       sessionExited: '会话已结束，点击重启按钮开始新会话',
       notifyWaitingTitle: 'Agent 等待输入',
       notifyDoneTitle: 'Agent 任务完成',
+      interrupt: '中断',
+      suggestContinue: '继续',
+      suggestLooksGood: 'LGTM, 继续',
+      suggestUndo: '撤销上一步',
+      suggestExplain: '解释一下',
     },
     gitPanel: {
       status: '变更',

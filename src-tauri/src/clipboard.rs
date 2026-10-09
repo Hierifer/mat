@@ -1,29 +1,21 @@
 use std::env;
 use std::fs;
-#[cfg(target_os = "macos")]
-use std::process::Command;
 use uuid::Uuid;
 
 #[tauri::command]
-pub fn send_macos_notification(title: String, body: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let script = format!(
-            "display notification \"{}\" with title \"{}\"",
-            body.replace('\\', "\\\\").replace('"', "\\\""),
-            title.replace('\\', "\\\\").replace('"', "\\\""),
-        );
-        Command::new("osascript")
-            .args(["-e", &script])
-            .output()
-            .map_err(|e| format!("Failed to send notification: {}", e))?;
-        Ok(())
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (title, body);
-        Err("osascript notifications are macOS-only".to_string())
-    }
+pub fn send_macos_notification(
+    app_handle: tauri::AppHandle,
+    title: String,
+    body: String,
+) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+    app_handle
+        .notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show()
+        .map_err(|e| format!("Failed to send notification: {}", e))
 }
 
 #[tauri::command]

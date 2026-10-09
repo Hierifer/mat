@@ -263,6 +263,7 @@ pub fn run() {
             // agent commands
             agent::commands::agent_spawn,
             agent::commands::agent_send,
+            agent::commands::agent_interrupt,
             agent::commands::agent_kill,
             // clipboard commands
             clipboard::save_clipboard_image,

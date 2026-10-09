@@ -166,6 +166,27 @@ impl AgentManager {
         Ok(())
     }
 
+    /// Send an interrupt signal to the agent (abort current tool, keep session alive).
+    pub async fn interrupt(&mut self, agent_id: &str) -> Result<(), String> {
+        let session = self
+            .sessions
+            .get_mut(agent_id)
+            .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
+
+        let msg = "{\"type\":\"interrupt\"}\n";
+        session
+            .stdin
+            .write_all(msg.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write interrupt to agent stdin: {}", e))?;
+        session
+            .stdin
+            .flush()
+            .await
+            .map_err(|e| format!("Failed to flush agent stdin: {}", e))?;
+        Ok(())
+    }
+
     /// Kill an agent process and remove it.
     pub async fn kill(&mut self, agent_id: &str) -> Result<(), String> {
         if let Some(mut session) = self.sessions.remove(agent_id) {

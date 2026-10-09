@@ -440,6 +440,26 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
+async function handleInterrupt() {
+  await agent.interrupt()
+}
+
+async function sendQuickReply(text: string) {
+  inputText.value = ''
+  await agent.send(text)
+}
+
+const suggestedReplies = computed(() => {
+  if (!agent.isRunning.value || agent.isBusy.value || props.readOnly) return []
+  if (agent.items.value.length === 0) return []
+  return [
+    { key: 'continue', label: t('studio.agent.suggestContinue', '继续') },
+    { key: 'lgtm', label: t('studio.agent.suggestLooksGood', 'LGTM, 继续') },
+    { key: 'undo', label: t('studio.agent.suggestUndo', '撤销上一步') },
+    { key: 'explain', label: t('studio.agent.suggestExplain', '解释一下') },
+  ]
+})
+
 async function handleRestart() {
   await agent.restart(props.cwd)
 }
@@ -480,6 +500,9 @@ onUnmounted(() => {
       <div class="agent-header-right">
         <span v-if="costText" class="agent-cost">{{ costText }}</span>
         <span v-if="statusText" class="agent-status">{{ statusText }}</span>
+        <button v-if="!props.readOnly && agent.isBusy.value" class="agent-interrupt-btn" :title="t('studio.agent.interrupt', '中断')" @click="handleInterrupt">
+          <icon-font name="stop" :size="12" />
+        </button>
         <button v-if="!props.readOnly" class="agent-restart-btn" :title="t('studio.agent.restart')" @click="handleRestart">
           <icon-font name="refresh" :size="12" />
         </button>
@@ -624,6 +647,15 @@ onUnmounted(() => {
           <span class="pending-file-name">{{ file.name }}</span>
           <button class="pending-file-remove" @click="removePendingFile(i)">&times;</button>
         </div>
+      </div>
+      <!-- Suggested quick replies -->
+      <div v-if="suggestedReplies.length > 0" class="suggested-replies">
+        <button
+          v-for="sr in suggestedReplies"
+          :key="sr.key"
+          class="suggested-reply-btn"
+          @click="sendQuickReply(sr.label)"
+        >{{ sr.label }}</button>
       </div>
       <div class="agent-input-row">
         <textarea
@@ -1510,6 +1542,75 @@ onUnmounted(() => {
   font-size: 11px;
   color: #4caf50;
   padding: 4px 0;
+}
+
+/* Interrupt button */
+.agent-interrupt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: rgba(244, 135, 113, 0.15);
+  border: 1px solid rgba(244, 135, 113, 0.4);
+  border-radius: 3px;
+  color: #f48771;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s;
+}
+
+.agent-interrupt-btn:hover {
+  background: rgba(244, 135, 113, 0.3);
+  color: #ff6b56;
+}
+
+.light-theme .agent-interrupt-btn {
+  background: rgba(220, 50, 30, 0.08);
+  border-color: rgba(220, 50, 30, 0.3);
+  color: #d32f2f;
+}
+
+.light-theme .agent-interrupt-btn:hover {
+  background: rgba(220, 50, 30, 0.15);
+}
+
+/* Suggested quick replies */
+.suggested-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+
+.suggested-reply-btn {
+  background: #2d2d30;
+  border: 1px solid #3c3c3c;
+  border-radius: 12px;
+  color: #d4d4d4;
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.suggested-reply-btn:hover {
+  border-color: #007acc;
+  background: #37373d;
+  color: #fff;
+}
+
+.light-theme .suggested-reply-btn {
+  background: #f0f0f0;
+  border-color: #ddd;
+  color: #333;
+}
+
+.light-theme .suggested-reply-btn:hover {
+  background: #e0e0e0;
+  border-color: #007acc;
+  color: #000;
 }
 
 </style>

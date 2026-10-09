@@ -220,6 +220,11 @@ export default {
       sessionExited: 'Session ended. Click restart to begin a new session.',
       notifyWaitingTitle: 'Agent Awaiting Input',
       notifyDoneTitle: 'Agent Task Complete',
+      interrupt: 'Interrupt',
+      suggestContinue: 'Continue',
+      suggestLooksGood: 'LGTM, continue',
+      suggestUndo: 'Undo last change',
+      suggestExplain: 'Explain what you did',
     },
     gitPanel: {
       status: 'Changes',

@@ -25,6 +25,7 @@ import WhatsNewModal from '@/components/settings/whats-new-modal.vue'
 import { usePlatform } from '@/composables/use-platform'
 import { getVersion } from '@tauri-apps/api/app'
 import { open as openDialog, ask } from '@tauri-apps/plugin-dialog'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 
 const terminalStore = useTerminalStore()
 const { updateInfo, isChecking, updateAvailable, checkForUpdates, reset: resetUpdater } = useUpdater()

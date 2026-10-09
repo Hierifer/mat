@@ -60,6 +60,14 @@ pub async fn agent_send(
 }
 
 #[command]
+pub async fn agent_interrupt(
+    manager: State<'_, Arc<Mutex<AgentManager>>>,
+    agent_id: String,
+) -> Result<(), String> {
+    manager.lock().await.interrupt(&agent_id).await
+}
+
+#[command]
 pub async fn agent_kill(
     manager: State<'_, Arc<Mutex<AgentManager>>>,
     agent_id: String,
