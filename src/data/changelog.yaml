@@ -1,6 +1,12 @@
 # Auto-generated from git history. Do not edit manually.
 # Regenerate: node scripts/generate-changelog.mjs
 
+- version: "1.7.2"
+  date: "2026-10-09"
+  features:
+    - "restore active worktree sessions, agent resume, and status dot improvements"
+  fixes: []
+
 - version: "1.7.1"
   date: "2026-10-09"
   features:
@@ -75,11 +81,3 @@
     - skip update prompt when current version matches remote
     - request macOS folder access permissions on startup
     - add process plugin for relaunch ACL permission
-
-- version: "1.3.2"
-  date: "2026-06-02"
-  features:
-    - proactively request microphone permission on macOS
-    - preserve terminal state across app updates
-    - add preset layouts and terminal keyword search
-  fixes: []

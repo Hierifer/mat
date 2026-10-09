@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.7.2': {
+    date: '2026-10-09',
+    features: [
+      'restore active worktree sessions, agent resume, and status dot improvements',
+    ],
+    fixes: [],
+  },
   '1.7.1': {
     date: '2026-10-09',
     features: [
@@ -97,14 +104,5 @@ export const changelog: Record<string, ChangelogEntry> = {
       'request macOS folder access permissions on startup',
       'add process plugin for relaunch ACL permission',
     ],
-  },
-  '1.3.2': {
-    date: '2026-06-02',
-    features: [
-      'proactively request microphone permission on macOS',
-      'preserve terminal state across app updates',
-      'add preset layouts and terminal keyword search',
-    ],
-    fixes: [],
   },
 }
