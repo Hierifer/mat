@@ -1,4 +1,4 @@
-import { ref, shallowRef, type Ref } from 'vue'
+import { computed, ref, shallowRef, type Ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
@@ -56,6 +56,8 @@ export function useAgentSession(roomId?: Ref<string | null>) {
   const unlisteners = shallowRef<UnlistenFn[]>([])
   // Map tool_use_id -> timeline item holding the tool card
   const toolItemsById = new Map<string, AgentTimelineItem>()
+  // Remember cwd for auto-resume
+  let lastCwd = ''
 
   function persistMessage(item: AgentTimelineItem) {
     const rid = roomId?.value
@@ -233,6 +235,8 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     // @ts-ignore
     if (!window.__TAURI_INTERNALS__) return
 
+    lastCwd = cwd
+
     // Don't clear items — loadHistory may have already populated them
     toolItemsById.clear()
     exitCode.value = null
@@ -266,7 +270,29 @@ export function useAgentSession(roomId?: Ref<string | null>) {
 
     const trimmed = text.trim()
     const hasAttachments = attachments && attachments.length > 0
-    if ((!trimmed && !hasAttachments) || !agentId.value || !isRunning.value) return
+    if (!trimmed && !hasAttachments) return
+
+    // Auto-resume: if the process died but we have a claudeSessionId, respawn with --resume
+    if (!isRunning.value && claudeSessionId.value && lastCwd) {
+      pushItem({ kind: 'user', text: trimmed, attachments: attachments?.map((a) => ({ name: a.name, path: a.path, previewUrl: a.previewUrl })) })
+      pushItem({ kind: 'system', text: 'Resuming session…' })
+      isBusy.value = true
+      try {
+        await stop()
+        await start(lastCwd, claudeSessionId.value)
+        await invoke('agent_send', {
+          agentId: agentId.value,
+          text: trimmed,
+          attachments: attachments?.map((a) => ({ path: a.path, media_type: a.mediaType })) ?? [],
+        })
+      } catch (error) {
+        isBusy.value = false
+        pushItem({ kind: 'error', text: String(error) })
+      }
+      return
+    }
+
+    if (!agentId.value || !isRunning.value) return
 
     pushItem({
       kind: 'user',
@@ -319,12 +345,16 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     await start(cwd)
   }
 
+  /** True when the process is dead but can be resumed via --resume */
+  const canResume = computed(() => !isRunning.value && !!claudeSessionId.value && !!lastCwd)
+
   return {
     agentId,
     claudeSessionId,
     items,
     isRunning,
     isBusy,
+    canResume,
     model,
     tools,
     slashCommands,

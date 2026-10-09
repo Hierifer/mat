@@ -427,7 +427,7 @@ async function handleSend() {
     name: f.name,
     previewUrl: f.previewUrl,
   }))
-  if ((!text && attachments.length === 0) || !agent.isRunning.value) return
+  if ((!text && attachments.length === 0) || (!agent.isRunning.value && !agent.canResume.value)) return
   inputText.value = ''
   // Don't revoke preview URLs — they're kept for display in sent message bubbles
   pendingFiles.value = []
@@ -495,7 +495,7 @@ async function sendQuickReply(text: string) {
 }
 
 const suggestedReplies = computed(() => {
-  if (!agent.isRunning.value || agent.isBusy.value || props.readOnly) return []
+  if ((!agent.isRunning.value && !agent.canResume.value) || agent.isBusy.value || props.readOnly) return []
   if (agent.items.value.length === 0) return []
   return [
     { key: 'continue', label: t('studio.agent.suggestContinue', '继续') },
@@ -724,8 +724,8 @@ onUnmounted(() => {
           v-model="inputText"
           class="agent-input"
           rows="2"
-          :placeholder="props.readOnly ? t('studio.agent.archived', '聊天已归档（只读）') : (agent.isRunning.value ? t('studio.agent.inputPlaceholder') : t('studio.agent.sessionExited'))"
-          :disabled="props.readOnly || !agent.isRunning.value"
+          :placeholder="props.readOnly ? t('studio.agent.archived', '聊天已归档（只读）') : (agent.isRunning.value ? t('studio.agent.inputPlaceholder') : (agent.canResume.value ? t('studio.agent.inputPlaceholder') : t('studio.agent.sessionExited')))"
+          :disabled="props.readOnly || (!agent.isRunning.value && !agent.canResume.value)"
           @keydown="handleKeydown"
           @compositionstart="handleCompositionStart"
           @compositionend="handleCompositionEnd"
