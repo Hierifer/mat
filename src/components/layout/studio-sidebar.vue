@@ -146,13 +146,13 @@ const handleDeleteBranch = async (branchId: string, event: Event) => {
         v-for="branch in store.studioBranches"
         :key="branch.id"
         class="branch-item"
-        :class="{ active: branch.id === store.activeStudioBranchId, merged: branch.status === 'merged' }"
+        :class="{ active: branch.id === store.activeStudioBranchId }"
         @click="handleBranchClick(branch.id)"
       >
-        <icon-font class="branch-icon" :name="branch.status === 'merged' ? 'check' : 'branch'" :size="14" />
+        <icon-font class="branch-icon" name="branch" :size="14" />
         <div class="branch-info">
           <input
-            v-if="editingBranchId === branch.id && branch.status !== 'merged'"
+            v-if="editingBranchId === branch.id"
             ref="editBranchInputRef"
             v-model="editingBranchName"
             class="branch-name-input"
@@ -160,18 +160,18 @@ const handleDeleteBranch = async (branchId: string, event: Event) => {
             @blur="cancelEditingBranch"
             @click.stop
           />
-          <span v-else class="branch-name" :class="{ 'merged-name': branch.status === 'merged' }" @click.stop="branch.status !== 'merged' && startEditingBranch(branch)">{{ branch.name }}</span>
+          <span v-else class="branch-name" @click.stop="startEditingBranch(branch)">{{ branch.name }}</span>
           <span class="branch-time">{{ formatTime(branch.createdAt) }}</span>
         </div>
         <!-- Delete button: only for active, non-default branches -->
         <button
-          v-if="branch.status === 'active' && branch.name !== store.studioProject?.defaultBranch"
+          v-if="branch.name !== store.studioProject?.defaultBranch"
           class="branch-delete"
           @click="handleDeleteBranch(branch.id, $event)"
           :title="t('studio.deleteBranch')"
         ><icon-font name="close" :size="10" /></button>
         <span
-          v-if="branch.status === 'active' && store.agentStatuses[branch.id]"
+          v-if="store.agentStatuses[branch.id]"
           class="branch-status-dot"
           :class="store.agentStatuses[branch.id]"
         />
@@ -439,20 +439,6 @@ const handleDeleteBranch = async (branchId: string, event: Event) => {
 
 .light-theme .branch-time {
   color: #999;
-}
-
-/* Merged branch styles */
-.branch-item.merged {
-  opacity: 0.6;
-}
-
-.branch-item.merged .branch-icon {
-  color: #4caf50;
-}
-
-.merged-name {
-  font-style: italic;
-  cursor: default !important;
 }
 
 .branch-delete {

@@ -211,6 +211,7 @@ export default {
     agent: {
       agentView: 'Agent',
       terminalView: '终端',
+      editorView: '编辑器',
       inputPlaceholder: '向 Claude Code 发送消息，Enter 发送，Shift+Enter 换行',
       send: '发送',
       ready: '就绪',

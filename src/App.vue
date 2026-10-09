@@ -21,6 +21,7 @@ import SessionManager from '@/components/terminal/session-manager.vue'
 import ClaudeStatusBar from '@/components/claude/claude-status-bar.vue'
 import StudioSidebar from '@/components/layout/studio-sidebar.vue'
 import StudioHome from '@/components/layout/studio-home.vue'
+import EditorView from '@/components/studio/editor/editor-view.vue'
 import WhatsNewModal from '@/components/settings/whats-new-modal.vue'
 import { usePlatform } from '@/composables/use-platform'
 import { getVersion } from '@tauri-apps/api/app'
@@ -556,7 +557,7 @@ onUnmounted(() => {
               <div v-if="branch.status !== 'merged'" class="branch-view-toolbar">
                 <button
                   class="view-toggle-btn"
-                  :class="{ active: branch.viewMode !== 'terminal' }"
+                  :class="{ active: branch.viewMode === 'agent' }"
                   @click="terminalStore.setStudioBranchViewMode(branch.id, 'agent')"
                 >{{ $t('studio.agent.agentView') }}</button>
                 <button
@@ -564,9 +565,14 @@ onUnmounted(() => {
                   :class="{ active: branch.viewMode === 'terminal' }"
                   @click="terminalStore.setStudioBranchViewMode(branch.id, 'terminal')"
                 >{{ $t('studio.agent.terminalView') }}</button>
+                <button
+                  class="view-toggle-btn"
+                  :class="{ active: branch.viewMode === 'editor' }"
+                  @click="terminalStore.setStudioBranchViewMode(branch.id, 'editor')"
+                >{{ $t('studio.agent.editorView') }}</button>
               </div>
 
-              <div v-show="branch.status === 'merged' || branch.viewMode !== 'terminal'" class="agent-view">
+              <div v-show="branch.status === 'merged' || branch.viewMode === 'agent'" class="agent-view">
                 <agent-panel
                   :cwd="branch.worktreePath"
                   :room-id="branch.id"
@@ -585,6 +591,10 @@ onUnmounted(() => {
                     cwd: branch.worktreePath,
                   }"
                 />
+              </div>
+
+              <div v-show="branch.status !== 'merged' && branch.viewMode === 'editor'" class="editor-view">
+                <editor-view :cwd="branch.worktreePath" />
               </div>
             </div>
           </template>
@@ -750,6 +760,13 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.editor-view {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
 }
 
 .studio-empty {

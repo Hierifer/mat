@@ -102,7 +102,7 @@ export interface StudioBranch {
   sessionId: string | null  // PTY session ID (lazy-created)
   paneId: string            // pane ID
   createdAt: number
-  viewMode: 'agent' | 'terminal'  // which view is shown for this branch
+  viewMode: 'agent' | 'terminal' | 'editor'  // which view is shown for this branch
   status: 'active' | 'merged'     // branch lifecycle status
   claudeSessionId?: string | null  // Claude Code session ID (for --resume)
 }
@@ -1350,70 +1350,6 @@ export const useTerminalStore = defineStore("terminal", {
       console.log(`[Studio] Removed branch ${branch.name}`)
     },
 
-    async mergeStudioBranch(branchId: string) {
-      const tab = this.activeStudioTab as StudioTab | undefined
-      if (!tab) return
-
-      const branch = tab.branches.find(b => b.id === branchId)
-      if (!branch) return
-
-      // Cannot merge default branch or already merged branches
-      if (branch.name === tab.project.defaultBranch) return
-      if (branch.status === 'merged') return
-
-      try {
-        // @ts-ignore
-        if (!window.__TAURI_INTERNALS__) return
-
-        // 1. Close PTY session
-        if (branch.sessionId) {
-          await invoke('pty_close', { sessionId: branch.sessionId })
-        }
-
-        // 2. Squash merge to default branch
-        await invoke('git_squash_merge', {
-          repoPath: tab.project.path,
-          branchName: branch.name,
-          defaultBranch: tab.project.defaultBranch,
-        })
-
-        // 3. Remove worktree and delete branch
-        await invoke('git_remove_worktree', {
-          repoPath: tab.project.path,
-          worktreePath: branch.worktreePath,
-          deleteBranch: false,
-        })
-        await invoke('git_delete_branch', {
-          repoPath: tab.project.path,
-          branchName: branch.name,
-        })
-
-        // 4. Update DB status
-        const mergedAt = Date.now()
-        await invoke('db_update_room_status', {
-          roomId: branchId,
-          status: 'merged',
-          mergedAt,
-        })
-
-        // 5. Update local state
-        branch.status = 'merged'
-        branch.sessionId = null
-
-        // 6. Switch to default branch
-        const defaultBranch = tab.branches.find(b => b.name === tab.project.defaultBranch)
-        if (defaultBranch) {
-          tab.activeBranchId = defaultBranch.id
-        }
-
-        this.refreshAllGitInfo()
-        console.log(`[Studio] Merged branch ${branch.name}`)
-      } catch (error) {
-        console.error(`[Studio] Failed to merge branch ${branch.name}:`, error)
-        throw error
-      }
-    },
-
     setActiveStudioBranch(branchId: string) {
       const tab = this.activeStudioTab as StudioTab | undefined
       if (tab) {
@@ -1435,7 +1371,7 @@ export const useTerminalStore = defineStore("terminal", {
       }
     },
 
-    setStudioBranchViewMode(branchId: string, mode: 'agent' | 'terminal') {
+    setStudioBranchViewMode(branchId: string, mode: 'agent' | 'terminal' | 'editor') {
       const tab = this.activeStudioTab as StudioTab | undefined
       const branch = tab?.branches.find(b => b.id === branchId)
       if (branch) {
