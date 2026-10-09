@@ -37,6 +37,39 @@ const { t } = useI18n()
 const { isMacOS, isWindows, isLinux } = usePlatform()
 const isLightTheme = computed(() => terminalStore.currentThemeName.includes('Light'))
 
+// Sidebar resizable width
+const SIDEBAR_MIN = 160
+const SIDEBAR_MAX = 500
+const SIDEBAR_DEFAULT = 240
+const SIDEBAR_STORAGE_KEY = 'materm_studio_sidebar_width'
+
+const sidebarWidth = ref(
+  Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Number(localStorage.getItem(SIDEBAR_STORAGE_KEY)) || SIDEBAR_DEFAULT))
+)
+const isDraggingSidebar = ref(false)
+
+const onSidebarDividerMouseDown = (e: MouseEvent) => {
+  e.preventDefault()
+  isDraggingSidebar.value = true
+  const startX = e.clientX
+  const startWidth = sidebarWidth.value
+
+  const onMouseMove = (ev: MouseEvent) => {
+    const delta = ev.clientX - startX
+    sidebarWidth.value = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, startWidth + delta))
+  }
+
+  const onMouseUp = () => {
+    isDraggingSidebar.value = false
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarWidth.value))
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+  }
+
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+}
+
 // Notification system
 const { notifyInfo } = useNotification()
 
@@ -511,8 +544,9 @@ onUnmounted(() => {
         />
       </div>
 
-      <div v-else class="studio-layout">
-        <studio-sidebar />
+      <div v-else class="studio-layout" :class="{ 'sidebar-dragging': isDraggingSidebar }">
+        <studio-sidebar :style="{ width: sidebarWidth + 'px' }" />
+        <div class="sidebar-divider" @mousedown="onSidebarDividerMouseDown"></div>
         <div class="studio-content" :class="{ 'light-theme': isLightTheme }">
           <template v-for="branch in terminalStore.studioBranches" :key="branch.id">
             <div
@@ -637,6 +671,24 @@ onUnmounted(() => {
   flex-direction: row;
   flex: 1;
   overflow: hidden;
+}
+
+.studio-layout.sidebar-dragging {
+  user-select: none;
+  cursor: col-resize;
+}
+
+.sidebar-divider {
+  width: 4px;
+  background: #2d2d2d;
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.sidebar-divider:hover,
+.studio-layout.sidebar-dragging .sidebar-divider {
+  background: #007acc;
 }
 
 .studio-content {
