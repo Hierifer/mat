@@ -14,6 +14,7 @@ pub struct ChatRoom {
     pub status: String,
     pub created_at: i64,
     pub merged_at: Option<i64>,
+    pub claude_session_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -49,7 +50,8 @@ impl StudioDb {
                 worktree_path TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'active',
                 created_at INTEGER NOT NULL,
-                merged_at INTEGER
+                merged_at INTEGER,
+                claude_session_id TEXT
             );
 
             CREATE TABLE IF NOT EXISTS chat_messages (
@@ -67,14 +69,19 @@ impl StudioDb {
         )
         .map_err(|e| format!("Failed to run migrations: {}", e))?;
 
+        // Migration: add claude_session_id column for existing databases
+        let _ = conn.execute_batch(
+            "ALTER TABLE chat_rooms ADD COLUMN claude_session_id TEXT;",
+        );
+
         Ok(Self { conn })
     }
 
     pub fn create_room(&self, room: &ChatRoom) -> Result<(), String> {
         self.conn
             .execute(
-                "INSERT INTO chat_rooms (id, project_path, branch_name, worktree_path, status, created_at, merged_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO chat_rooms (id, project_path, branch_name, worktree_path, status, created_at, merged_at, claude_session_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     room.id,
                     room.project_path,
@@ -83,6 +90,7 @@ impl StudioDb {
                     room.status,
                     room.created_at,
                     room.merged_at,
+                    room.claude_session_id,
                 ],
             )
             .map_err(|e| format!("Failed to create room: {}", e))?;
@@ -93,7 +101,7 @@ impl StudioDb {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT id, project_path, branch_name, worktree_path, status, created_at, merged_at
+                "SELECT id, project_path, branch_name, worktree_path, status, created_at, merged_at, claude_session_id
                  FROM chat_rooms WHERE project_path = ?1 ORDER BY created_at",
             )
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
@@ -108,6 +116,7 @@ impl StudioDb {
                     status: row.get(4)?,
                     created_at: row.get(5)?,
                     merged_at: row.get(6)?,
+                    claude_session_id: row.get(7)?,
                 })
             })
             .map_err(|e| format!("Failed to query rooms: {}", e))?
@@ -129,6 +138,20 @@ impl StudioDb {
                 params![status, merged_at, room_id],
             )
             .map_err(|e| format!("Failed to update room status: {}", e))?;
+        Ok(())
+    }
+
+    pub fn update_claude_session_id(
+        &self,
+        room_id: &str,
+        claude_session_id: &str,
+    ) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE chat_rooms SET claude_session_id = ?1 WHERE id = ?2",
+                params![claude_session_id, room_id],
+            )
+            .map_err(|e| format!("Failed to update claude_session_id: {}", e))?;
         Ok(())
     }
 
@@ -244,6 +267,16 @@ pub fn db_update_room_status(
 ) -> Result<(), String> {
     let db = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
     db.update_room_status(&room_id, &status, merged_at)
+}
+
+#[tauri::command]
+pub fn db_update_claude_session_id(
+    db: State<'_, Arc<StdMutex<StudioDb>>>,
+    room_id: String,
+    claude_session_id: String,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    db.update_claude_session_id(&room_id, &claude_session_id)
 }
 
 #[tauri::command]

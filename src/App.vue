@@ -537,6 +537,7 @@ onUnmounted(() => {
                   :cwd="branch.worktreePath"
                   :room-id="branch.id"
                   :read-only="branch.status === 'merged'"
+                  :resume-session-id="branch.claudeSessionId"
                 />
               </div>
 

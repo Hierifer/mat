@@ -20,6 +20,7 @@ const props = defineProps<{
   cwd: string
   roomId?: string
   readOnly?: boolean
+  resumeSessionId?: string | null
 }>()
 
 const { t } = useI18n()
@@ -33,6 +34,15 @@ const isLightTheme = computed(() => store.currentThemeName.includes('Light'))
 const inputText = ref('')
 const timelineRef = ref<HTMLElement | null>(null)
 const expandedTools = ref<Set<string>>(new Set())
+const showScrollToBottom = ref(false)
+
+function handleTimelineScroll() {
+  const el = timelineRef.value
+  if (!el) return
+  // Show button when scrolled up more than 80px from bottom
+  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  showScrollToBottom.value = distanceFromBottom > 80
+}
 
 // AskUserQuestion interactive card helpers
 interface AskQuestion {
@@ -246,11 +256,28 @@ async function handleFilePicker() {
 }
 
 // Sync agent busy/waiting status to the global store for sidebar breathing dot
-// and send system notifications on status transitions
+// and send system notifications on status transitions.
+//
+// Status semantics:
+//   busy    = agent is working (blue dot, pulsing)
+//   waiting = agent sent AskUserQuestion and awaits user reply (orange dot)
+//   done    = agent turn finished / session exited (green dot)
 let prevStatus: string | null = null
 
+function hasPendingAsk(): boolean {
+  const list = agent.items.value
+  for (let i = list.length - 1; i >= 0; i--) {
+    const it = list[i]
+    if (it.kind === 'user') break  // stop at last user message
+    if (it.kind === 'tool' && it.tool?.name === 'AskUserQuestion' && it.tool.result === null) {
+      return true
+    }
+  }
+  return false
+}
+
 watch(
-  [agent.isBusy, agent.isRunning, agent.exitCode],
+  [agent.isBusy, agent.isRunning, agent.exitCode, () => agent.items.value.length],
   ([busy, running, exit]) => {
     if (!props.roomId) return
 
@@ -260,10 +287,17 @@ watch(
     } else if (busy) {
       status = 'busy'
     } else {
-      status = 'waiting'
+      // Not busy, still running — check if agent asked a question
+      status = hasPendingAsk() ? 'waiting' : 'done'
     }
 
-    store.agentStatuses[props.roomId] = status
+    // If user is currently viewing this branch, don't show done/waiting dots
+    const isViewing = store.activeStudioBranchId === props.roomId
+    if (isViewing && (status === 'done' || status === 'waiting')) {
+      delete store.agentStatuses[props.roomId]
+    } else {
+      store.agentStatuses[props.roomId] = status
+    }
 
     // Send system notifications on relevant transitions
     if (store.notificationsEnabled && prevStatus !== null && prevStatus !== status) {
@@ -279,6 +313,16 @@ watch(
   },
   { immediate: true }
 )
+
+const headerStatusClass = computed(() => {
+  if (agent.exitCode.value !== null || !agent.isRunning.value) {
+    return 'done'
+  }
+  if (agent.isBusy.value) {
+    return 'busy'
+  }
+  return hasPendingAsk() ? 'waiting' : 'done'
+})
 
 const statusText = computed(() => {
   if (agent.exitCode.value !== null) return t('studio.agent.sessionExited')
@@ -326,6 +370,7 @@ async function scrollToBottom() {
   await nextTick()
   const el = timelineRef.value
   if (el) el.scrollTop = el.scrollHeight
+  showScrollToBottom.value = false
   // Keep the active tool list scrolled to the newest entry
   const lists = el?.querySelectorAll('.tool-group-list')
   if (lists && lists.length > 0) {
@@ -477,7 +522,7 @@ onMounted(async () => {
   if (props.roomId) {
     await agent.loadHistory(props.roomId)
   }
-  agent.start(props.cwd).catch((error) => {
+  agent.start(props.cwd, props.resumeSessionId || undefined).catch((error) => {
     console.error('[Agent] Failed to start:', error)
   })
 })
@@ -492,7 +537,7 @@ onUnmounted(() => {
     <!-- Header -->
     <div class="agent-header">
       <div class="agent-header-left">
-        <span class="agent-status-dot" :class="{ running: agent.isRunning.value, busy: agent.isBusy.value, waiting: agent.isRunning.value && !agent.isBusy.value }" />
+        <span class="agent-status-dot" :class="headerStatusClass" />
         <span class="agent-title">Claude Code</span>
         <span v-if="agent.model.value" class="agent-model">{{ agent.model.value }}</span>
         <span class="agent-badge-skip">skip-permissions</span>
@@ -510,7 +555,8 @@ onUnmounted(() => {
     </div>
 
     <!-- Timeline -->
-    <div ref="timelineRef" class="agent-timeline">
+    <div class="agent-timeline-wrapper">
+      <div ref="timelineRef" class="agent-timeline" @scroll="handleTimelineScroll">
       <div v-if="agent.items.value.length === 0" class="agent-empty">
         <p>{{ t('studio.agent.emptyHint') }}</p>
         <p class="agent-empty-cwd">{{ props.cwd }}</p>
@@ -619,6 +665,22 @@ onUnmounted(() => {
       </div>
     </div>
 
+      <!-- Scroll to bottom button -->
+      <transition name="fade">
+        <button
+          v-if="showScrollToBottom"
+          class="scroll-to-bottom-btn"
+          :title="t('studio.agent.scrollToBottom', '回到底部')"
+          @click="scrollToBottom"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 12L3 7L4.4 5.6L8 9.2L11.6 5.6L13 7L8 12Z" fill="currentColor" />
+            <path d="M3 13H13V14H3V13Z" fill="currentColor" />
+          </svg>
+        </button>
+      </transition>
+    </div>
+
     <!-- Input -->
     <div
       class="agent-input-area"
@@ -719,28 +781,28 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.agent-status-dot.running {
-  background: #4caf50;
+.agent-status-dot.busy {
+  background: #2196f3;
+  animation: agent-pulse 1.2s ease-in-out infinite;
 }
 
 .agent-status-dot.waiting {
-  background: #2196f3;
-  animation: breathe-blue 2s ease-in-out infinite;
-}
-
-.agent-status-dot.busy {
   background: #ff9800;
-  animation: pulse 1.2s ease-in-out infinite;
+  animation: agent-breathe 2s ease-in-out infinite;
 }
 
-@keyframes breathe-blue {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(1.1); }
+.agent-status-dot.done {
+  background: #4caf50;
 }
 
-@keyframes pulse {
+@keyframes agent-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
+}
+
+@keyframes agent-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.1); }
 }
 
 .agent-title {
@@ -804,6 +866,15 @@ onUnmounted(() => {
   color: #000;
 }
 
+/* Timeline wrapper (holds timeline + scroll-to-bottom button) */
+.agent-timeline-wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Timeline */
 .agent-timeline {
   flex: 1;
@@ -813,6 +884,60 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* Scroll to bottom button */
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 12px;
+  right: 16px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(37, 37, 38, 0.95);
+  border: 1px solid #454545;
+  border-radius: 50%;
+  color: #d4d4d4;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: rgba(50, 50, 50, 0.98);
+  border-color: #007acc;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.scroll-to-bottom-btn:active {
+  transform: scale(0.95);
+}
+
+.light-theme .scroll-to-bottom-btn {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: #ccc;
+  color: #555;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.light-theme .scroll-to-bottom-btn:hover {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: #007acc;
+  color: #333;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 
 .agent-empty {

@@ -40,6 +40,7 @@ function nextItemId(): string {
  */
 export function useAgentSession(roomId?: Ref<string | null>) {
   const agentId = ref<string | null>(null)
+  const claudeSessionId = ref<string | null>(null) // Claude Code's own session ID (for --resume)
   const items = ref<AgentTimelineItem[]>([])
   const isRunning = ref(false)   // process alive
   const isBusy = ref(false)      // waiting for current turn to finish
@@ -112,6 +113,17 @@ export function useAgentSession(roomId?: Ref<string | null>) {
           }
           if (Array.isArray(event.slash_commands)) {
             slashCommands.value = event.slash_commands.filter((c: unknown) => typeof c === 'string')
+          }
+          // Capture Claude Code's session ID for future --resume
+          if (event.session_id) {
+            claudeSessionId.value = event.session_id
+            const rid = roomId?.value
+            if (rid) {
+              invoke('db_update_claude_session_id', {
+                roomId: rid,
+                claudeSessionId: event.session_id,
+              }).catch(e => console.warn('[Agent] Failed to persist claude session_id:', e))
+            }
           }
         }
         break
@@ -215,7 +227,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     }
   }
 
-  async function start(cwd: string) {
+  async function start(cwd: string, resumeSessionId?: string) {
     if (agentId.value) return
 
     // @ts-ignore
@@ -227,7 +239,10 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     totalCostUsd.value = 0
     model.value = ''
 
-    const response = await invoke<{ agent_id: string }>('agent_spawn', { cwd })
+    const response = await invoke<{ agent_id: string }>('agent_spawn', {
+      cwd,
+      resumeSessionId: resumeSessionId || null,
+    })
     const id = response.agent_id
     agentId.value = id
     isRunning.value = true
@@ -306,6 +321,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
 
   return {
     agentId,
+    claudeSessionId,
     items,
     isRunning,
     isBusy,

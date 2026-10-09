@@ -104,6 +104,7 @@ export interface StudioBranch {
   createdAt: number
   viewMode: 'agent' | 'terminal'  // which view is shown for this branch
   status: 'active' | 'merged'     // branch lifecycle status
+  claudeSessionId?: string | null  // Claude Code session ID (for --resume)
 }
 
 export interface GitFileStatus {
@@ -1113,7 +1114,7 @@ export const useTerminalStore = defineStore("terminal", {
       this.activeStudioTabId = tabId
       this.recordRecentProject(projectPath, info.repo_name)
 
-      // Load merged chat rooms from DB as read-only branches
+      // Load chat rooms from DB
       try {
         const rooms = await invoke<Array<{
           id: string
@@ -1123,7 +1124,10 @@ export const useTerminalStore = defineStore("terminal", {
           status: string
           createdAt: number
           mergedAt: number | null
+          claudeSessionId: string | null
         }>>('db_get_rooms', { projectPath })
+
+        // Restore merged branches as read-only
         for (const room of rooms.filter(r => r.status === 'merged')) {
           newTab.branches.push({
             id: room.id,
@@ -1136,8 +1140,31 @@ export const useTerminalStore = defineStore("terminal", {
             status: 'merged',
           })
         }
+
+        // Restore active branches (skip default branch — it will be auto-created below)
+        for (const room of rooms.filter(r => r.status === 'active' && r.branchName !== info.default_branch)) {
+          try {
+            const response = await invoke<{ session_id: string; cwd: string }>(
+              'pty_spawn',
+              { cols: 80, rows: 24, cwd: room.worktreePath },
+            )
+            newTab.branches.push({
+              id: room.id,
+              name: room.branchName,
+              worktreePath: room.worktreePath,
+              sessionId: response.session_id,
+              paneId: `pane_studio_${room.id}`,
+              createdAt: room.createdAt,
+              viewMode: 'agent',
+              status: 'active',
+              claudeSessionId: room.claudeSessionId,
+            })
+          } catch (e) {
+            console.warn(`[Studio] Failed to restore active branch ${room.branchName}:`, e)
+          }
+        }
       } catch (e) {
-        console.warn('[Studio] Failed to load merged rooms:', e)
+        console.warn('[Studio] Failed to load chat rooms:', e)
       }
 
       // Auto-create the default branch as a fixed workspace entry
@@ -1253,6 +1280,7 @@ export const useTerminalStore = defineStore("terminal", {
           createdAt: Date.now(),
           viewMode: 'agent',
           status: 'active',
+          claudeSessionId: null,
         }
 
         tab.branches.push(branch)
@@ -1269,6 +1297,7 @@ export const useTerminalStore = defineStore("terminal", {
             status: 'active',
             createdAt: branch.createdAt,
             mergedAt: null,
+            claudeSessionId: null,
           }
         }).catch(e => console.warn('[Studio] Failed to create chat room:', e))
 
@@ -1389,6 +1418,10 @@ export const useTerminalStore = defineStore("terminal", {
       const tab = this.activeStudioTab as StudioTab | undefined
       if (tab) {
         tab.activeBranchId = branchId
+      }
+      // Clear done/waiting status — user has seen this branch
+      if (this.agentStatuses[branchId] === 'done' || this.agentStatuses[branchId] === 'waiting') {
+        delete this.agentStatuses[branchId]
       }
       this.refreshAllGitInfo()
     },

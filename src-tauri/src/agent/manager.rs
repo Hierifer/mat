@@ -31,7 +31,12 @@ impl AgentManager {
     /// Spawn a headless Claude Code process in `cwd`.
     /// Emits `agent_event_{id}` for each stdout JSON line,
     /// `agent_stderr_{id}` for stderr lines, and `agent_exit_{id}` on exit.
-    pub fn spawn(&mut self, cwd: String, app: AppHandle) -> Result<String, String> {
+    pub fn spawn(
+        &mut self,
+        cwd: String,
+        app: AppHandle,
+        resume_session_id: Option<String>,
+    ) -> Result<String, String> {
         if !std::path::Path::new(&cwd).is_dir() {
             return Err(format!("Directory does not exist: {}", cwd));
         }
@@ -41,10 +46,13 @@ impl AgentManager {
         // Run via a login shell so the user's PATH (nvm/homebrew etc.) is inherited;
         // GUI apps on macOS otherwise have a minimal PATH without `claude`.
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-        let claude_cmd = "claude -p --input-format stream-json --output-format stream-json --verbose --dangerously-skip-permissions";
+        let mut claude_cmd = String::from("claude -p --input-format stream-json --output-format stream-json --verbose --dangerously-skip-permissions");
+        if let Some(sid) = &resume_session_id {
+            claude_cmd.push_str(&format!(" --resume {}", sid));
+        }
 
         let mut child = Command::new(&shell)
-            .args(["-lc", claude_cmd])
+            .args(["-lc", &claude_cmd])
             .current_dir(&cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

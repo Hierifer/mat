@@ -15,8 +15,12 @@ pub async fn agent_spawn(
     manager: State<'_, Arc<Mutex<AgentManager>>>,
     app_handle: AppHandle,
     cwd: String,
+    resume_session_id: Option<String>,
 ) -> Result<AgentSpawnResponse, String> {
-    let agent_id = manager.lock().await.spawn(cwd, app_handle.clone())?;
+    let agent_id = manager
+        .lock()
+        .await
+        .spawn(cwd, app_handle.clone(), resume_session_id)?;
 
     // Watch for process exit and notify frontend
     {

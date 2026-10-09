@@ -257,6 +257,7 @@ pub fn run() {
             db::db_add_message,
             db::db_get_messages,
             db::db_update_room_status,
+            db::db_update_claude_session_id,
             db::db_delete_room,
             // git squash merge
             git::git_squash_merge,

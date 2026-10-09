@@ -116,21 +116,6 @@ const handleDeleteBranch = async (branchId: string, event: Event) => {
   }
 }
 
-const handleMergeBranch = async (branchId: string, event: Event) => {
-  event.stopPropagation()
-  const branch = store.studioBranches.find(b => b.id === branchId)
-  if (!branch) return
-
-  const msg = t('studio.confirmMerge', { name: branch.name, target: store.studioProject?.defaultBranch ?? 'main' })
-  if (confirm(msg)) {
-    try {
-      await store.mergeStudioBranch(branchId)
-    } catch (error) {
-      console.error('[Studio] Merge failed:', error)
-    }
-  }
-}
-
 
 </script>
 
@@ -172,18 +157,6 @@ const handleMergeBranch = async (branchId: string, event: Event) => {
           <span v-else class="branch-name" :class="{ 'merged-name': branch.status === 'merged' }" @click.stop="branch.status !== 'merged' && startEditingBranch(branch)">{{ branch.name }}</span>
           <span class="branch-time">{{ formatTime(branch.createdAt) }}</span>
         </div>
-        <span
-          v-if="branch.status === 'active' && store.agentStatuses[branch.id]"
-          class="branch-status-dot"
-          :class="store.agentStatuses[branch.id]"
-        />
-        <!-- Merge button: only for active, non-default branches -->
-        <button
-          v-if="branch.status === 'active' && branch.name !== store.studioProject?.defaultBranch"
-          class="branch-merge"
-          @click="handleMergeBranch(branch.id, $event)"
-          :title="t('studio.mergeBranch', 'Merge branch')"
-        ><icon-font name="check" :size="10" /></button>
         <!-- Delete button: only for active, non-default branches -->
         <button
           v-if="branch.status === 'active' && branch.name !== store.studioProject?.defaultBranch"
@@ -191,6 +164,11 @@ const handleMergeBranch = async (branchId: string, event: Event) => {
           @click="handleDeleteBranch(branch.id, $event)"
           :title="t('studio.deleteBranch')"
         ><icon-font name="close" :size="10" /></button>
+        <span
+          v-if="branch.status === 'active' && store.agentStatuses[branch.id]"
+          class="branch-status-dot"
+          :class="store.agentStatuses[branch.id]"
+        />
       </div>
 
       <!-- Empty state -->
@@ -368,25 +346,22 @@ const handleMergeBranch = async (branchId: string, event: Event) => {
   border-radius: 50%;
   background: #666;
   flex-shrink: 0;
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
 }
 
 .branch-status-dot.busy {
-  background: #ff9800;
+  background: #2196f3;
   animation: sidebar-pulse 1.2s ease-in-out infinite;
 }
 
 .branch-status-dot.waiting {
-  background: #2196f3;
+  background: #ff9800;
   animation: sidebar-breathe 2s ease-in-out infinite;
 }
 
 .branch-status-dot.done {
   background: #4caf50;
 }
+
 
 @keyframes sidebar-pulse {
   0%, 100% { opacity: 1; }
@@ -472,33 +447,6 @@ const handleMergeBranch = async (branchId: string, event: Event) => {
 .merged-name {
   font-style: italic;
   cursor: default !important;
-}
-
-.branch-merge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: transparent;
-  border: none;
-  border-radius: 3px;
-  color: #666;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 0;
-  transition: all 0.15s;
-  opacity: 0.35;
-  flex-shrink: 0;
-}
-
-.branch-item:hover .branch-merge {
-  opacity: 1;
-}
-
-.branch-merge:hover {
-  background: #4caf50;
-  color: white;
 }
 
 .branch-delete {
