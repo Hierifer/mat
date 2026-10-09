@@ -159,7 +159,7 @@ const handleRefresh = async () => {
             v-model="editingBranchName"
             class="branch-name-input"
             @keydown="handleEditBranchKeydown"
-            @blur="confirmEditBranch"
+            @blur="cancelEditingBranch"
             @click.stop
             autofocus
           />
@@ -233,6 +233,7 @@ const handleRefresh = async () => {
   border-right: 1px solid #333;
   user-select: none;
   transition: background 0.3s, border-color 0.3s;
+  box-sizing: border-box;
 }
 
 .studio-sidebar.light-theme {
@@ -390,7 +391,10 @@ const handleRefresh = async () => {
   border-radius: 50%;
   background: #666;
   flex-shrink: 0;
-  margin-left: auto;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .branch-status-dot.busy {
@@ -507,7 +511,7 @@ const handleRefresh = async () => {
   font-size: 16px;
   padding: 0;
   transition: all 0.15s;
-  opacity: 0;
+  opacity: 0.35;
   flex-shrink: 0;
 }
 
@@ -534,7 +538,7 @@ const handleRefresh = async () => {
   font-size: 16px;
   padding: 0;
   transition: all 0.15s;
-  opacity: 0;
+  opacity: 0.35;
   flex-shrink: 0;
 }
 
