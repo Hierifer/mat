@@ -216,9 +216,9 @@ const handleDeleteBranch = async (branchId: string, event: Event) => {
 .studio-sidebar {
   display: flex;
   flex-direction: column;
-  width: 240px;
-  min-width: 180px;
-  max-width: 400px;
+  min-width: 160px;
+  max-width: 500px;
+  flex-shrink: 0;
   background: #1e1e1e;
   border-right: 1px solid #333;
   user-select: none;
