@@ -8,6 +8,18 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.7.4': {
+    date: '2026-10-10',
+    features: [
+      'agent retry on auth error, interrupt button in input area, thinking metrics',
+      'render TodoWrite as real-time task progress card in agent panel',
+      'click git changed files to open in editor',
+      'add light/dark theme support and VS Code-style icons to editor',
+      'render ExitPlanMode as markdown card in Agent panel',
+      'tab inverse border-radius, smart suggested replies, standalone ask-card',
+    ],
+    fixes: [],
+  },
   '1.7.3': {
     date: '2026-10-10',
     features: [
@@ -86,23 +98,6 @@ export const changelog: Record<string, ChangelogEntry> = {
     ],
     fixes: [
       'shifted symbol keys (e.g. Shift+9) swallowed by WebKit IME composition in terminal',
-    ],
-  },
-  '1.5.0': {
-    date: '2026-07-16',
-    features: [
-      'add Claude Code agent studio panel and drop-in SVG icon system',
-      'auto-reattach tmux sessions with layout restore on restart',
-      'add TTS voice announcements on Claude Code completion and qlty config',
-      'add git tree/stash management with git2-rs and multi-project studio tabs',
-      'add notification sound and breathing red dot on Claude Code completion',
-      'restore cwd on update restart, add shell integration for OSC 7, fix speech input and resize',
-    ],
-    fixes: [
-      'auto-create initial commit for empty repos so studio branch creation works',
-      'drop git2 https/ssh features to unblock CI openssl-sys build failure',
-      'ensure terminal textarea focus on click and share claude status state',
-      'prevent terminal scroll reset during Claude Code usage',
     ],
   },
 }
