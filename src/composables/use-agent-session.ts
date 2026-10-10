@@ -52,6 +52,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
   const lastDurationMs = ref(0)
   const exitCode = ref<number | null>(null)
   const readOnly = ref(false)
+  const suggestedResponses = ref<string[]>([])  // Claude Code's suggested replies from result event
 
   const unlisteners = shallowRef<UnlistenFn[]>([])
   // Map tool_use_id -> timeline item holding the tool card
@@ -190,6 +191,14 @@ export function useAgentSession(roomId?: Ref<string | null>) {
         if (event.is_error) {
           pushItem({ kind: 'error', text: event.result || 'Task failed' })
         }
+        // Capture Claude Code's context-aware suggested replies
+        if (Array.isArray(event.suggested_responses)) {
+          suggestedResponses.value = event.suggested_responses.filter(
+            (s: unknown) => typeof s === 'string' && s.trim()
+          )
+        } else {
+          suggestedResponses.value = []
+        }
         break
       }
     }
@@ -294,6 +303,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
 
     if (!agentId.value || !isRunning.value) return
 
+    suggestedResponses.value = []
     pushItem({
       kind: 'user',
       text: trimmed,
@@ -362,6 +372,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     lastDurationMs,
     exitCode,
     readOnly,
+    suggestedResponses,
     start,
     send,
     interrupt,

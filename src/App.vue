@@ -907,8 +907,36 @@ onUnmounted(() => {
   background: #1e1e1e;
 }
 
+.studio-tab.active::before,
+.studio-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}
+
+.studio-tab.active::before {
+  left: -8px;
+  background: radial-gradient(circle at 0 0, transparent 8px, #1e1e1e 8px);
+}
+
+.studio-tab.active::after {
+  right: -8px;
+  background: radial-gradient(circle at 100% 0, transparent 8px, #1e1e1e 8px);
+}
+
 .studio-project-bar.light-theme .studio-tab.active {
   background: #f3f3f3;
+}
+
+.studio-project-bar.light-theme .studio-tab.active::before {
+  background: radial-gradient(circle at 0 0, transparent 8px, #f3f3f3 8px);
+}
+
+.studio-project-bar.light-theme .studio-tab.active::after {
+  background: radial-gradient(circle at 100% 0, transparent 8px, #f3f3f3 8px);
 }
 
 .studio-tab-icon {
