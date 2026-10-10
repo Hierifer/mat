@@ -197,6 +197,8 @@ export const useTerminalStore = defineStore("terminal", {
     studioGitLoading: false,
     // Agent status per branch (written by agent-panel watcher)
     agentStatuses: {} as Record<string, 'busy' | 'waiting' | 'done'>,
+    // Pending file to open in editor (set by git panel, consumed by editor-view)
+    pendingEditorFile: null as string | null,
     // System notification toggles (persisted via localStorage)
     notificationsEnabled: localStorage.getItem('materm_notifications_enabled') !== 'false',
     notifyOnAgentWaiting: localStorage.getItem('materm_notify_agent_waiting') !== 'false',
@@ -1377,6 +1379,13 @@ export const useTerminalStore = defineStore("terminal", {
       if (branch) {
         branch.viewMode = mode
       }
+    },
+
+    openFileInEditor(filePath: string) {
+      const branch = this.activeStudioBranch
+      if (!branch) return
+      branch.viewMode = 'editor'
+      this.pendingEditorFile = filePath
     },
 
     // ============================================================================

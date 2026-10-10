@@ -74,6 +74,15 @@ const handleDropStash = async (index: number) => {
 }
 
 
+// Click file to open in editor
+const handleFileClick = (relativePath: string, status: string) => {
+  if (status === 'deleted') return
+  const branch = store.activeStudioBranch
+  if (!branch) return
+  const fullPath = branch.worktreePath + '/' + relativePath
+  store.openFileInEditor(fullPath)
+}
+
 // Status dot color
 const statusColor = (status: string, staged: boolean): string => {
   if (staged) return '#73c991'      // green
@@ -102,7 +111,7 @@ const statusColor = (status: string, staged: boolean): string => {
           <!-- Staged -->
           <template v-if="stagedFiles.length">
             <div class="group-label">{{ t('studio.gitPanel.staged') }}</div>
-            <div v-for="file in stagedFiles" :key="'s-' + file.path" class="file-item">
+            <div v-for="file in stagedFiles" :key="'s-' + file.path" class="file-item clickable" :class="{ deleted: file.status === 'deleted' }" @click="handleFileClick(file.path, file.status)">
               <span class="status-dot" :style="{ background: statusColor(file.status, true) }"></span>
               <span class="file-path">{{ file.path }}</span>
             </div>
@@ -110,7 +119,7 @@ const statusColor = (status: string, staged: boolean): string => {
           <!-- Modified -->
           <template v-if="modifiedFiles.length">
             <div class="group-label">{{ t('studio.gitPanel.modified') }}</div>
-            <div v-for="file in modifiedFiles" :key="'m-' + file.path" class="file-item">
+            <div v-for="file in modifiedFiles" :key="'m-' + file.path" class="file-item clickable" :class="{ deleted: file.status === 'deleted' }" @click="handleFileClick(file.path, file.status)">
               <span class="status-dot" :style="{ background: statusColor(file.status, false) }"></span>
               <span class="file-path">{{ file.path }}</span>
             </div>
@@ -118,7 +127,7 @@ const statusColor = (status: string, staged: boolean): string => {
           <!-- Untracked -->
           <template v-if="untrackedFiles.length">
             <div class="group-label">{{ t('studio.gitPanel.untracked') }}</div>
-            <div v-for="file in untrackedFiles" :key="'u-' + file.path" class="file-item">
+            <div v-for="file in untrackedFiles" :key="'u-' + file.path" class="file-item clickable" @click="handleFileClick(file.path, file.status)">
               <span class="status-dot" :style="{ background: statusColor(file.status, false) }"></span>
               <span class="file-path">{{ file.path }}</span>
             </div>
@@ -345,6 +354,34 @@ const statusColor = (status: string, staged: boolean): string => {
   align-items: center;
   gap: 6px;
   padding: 2px 0;
+}
+
+.file-item.clickable {
+  cursor: pointer;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  border-radius: 3px;
+}
+
+.file-item.clickable:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.file-item.clickable.deleted {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.file-item.clickable.deleted:hover {
+  background: transparent;
+}
+
+.light-theme .file-item.clickable:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.light-theme .file-item.clickable.deleted:hover {
+  background: transparent;
 }
 
 .status-dot {

@@ -19,6 +19,7 @@ interface TreeNode extends FsEntry {
 
 const props = defineProps<{
   rootPath: string
+  lightTheme?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -81,21 +82,49 @@ async function handleClick(node: TreeNode) {
   }
 }
 
-function getFileIcon(node: TreeNode): string {
-  if (node.is_dir) {
-    return node.expanded ? '📂' : '📁'
-  }
+interface FileIcon {
+  label: string
+  color: string
+}
+
+function getFileIcon(node: TreeNode): FileIcon | null {
+  if (node.is_dir) return null
   const ext = node.extension?.toLowerCase()
+  const name = node.name.toLowerCase()
+  // Match by full filename first
+  switch (name) {
+    case '.gitignore': case '.gitattributes': return { label: '', color: '#f54d27' }
+    case '.env': case '.env.local': case '.env.production': return { label: '', color: '#ecd53f' }
+    case 'dockerfile': return { label: '', color: '#2496ed' }
+    case 'license': case 'licence': return { label: '', color: '#d4af37' }
+    case 'eslint.config.js': case '.eslintrc.js': case '.eslintrc.json': return { label: '', color: '#4b32c3' }
+  }
+  // Match by extension
   switch (ext) {
-    case 'ts': case 'tsx': return '🟦'
-    case 'js': case 'jsx': return '🟨'
-    case 'vue': return '💚'
-    case 'rs': return '🦀'
-    case 'json': return '📋'
-    case 'md': return '📝'
-    case 'css': case 'scss': return '🎨'
-    case 'html': return '🌐'
-    default: return '📄'
+    case 'ts': return { label: 'TS', color: '#3178c6' }
+    case 'tsx': return { label: 'TS', color: '#3178c6' }
+    case 'js': return { label: 'JS', color: '#f1e05a' }
+    case 'jsx': return { label: 'JS', color: '#f1e05a' }
+    case 'mjs': case 'cjs': return { label: 'JS', color: '#f1e05a' }
+    case 'vue': return { label: 'V', color: '#41b883' }
+    case 'rs': return { label: 'RS', color: '#dea584' }
+    case 'json': return { label: '{ }', color: '#a8b1c2' }
+    case 'md': return { label: 'M', color: '#519aba' }
+    case 'css': return { label: '#', color: '#563d7c' }
+    case 'scss': case 'sass': return { label: '#', color: '#c6538c' }
+    case 'less': return { label: '#', color: '#1d365d' }
+    case 'html': case 'htm': return { label: '<>', color: '#e34c26' }
+    case 'svg': return { label: 'SVG', color: '#ffb13b' }
+    case 'toml': return { label: 'T', color: '#9c4221' }
+    case 'yaml': case 'yml': return { label: 'Y', color: '#cb171e' }
+    case 'py': return { label: 'PY', color: '#3572a5' }
+    case 'go': return { label: 'GO', color: '#00add8' }
+    case 'sh': case 'bash': case 'zsh': return { label: '$', color: '#89e051' }
+    case 'lock': return { label: '', color: '#888' }
+    case 'png': case 'jpg': case 'jpeg': case 'gif': case 'webp': case 'ico': return { label: '', color: '#a074c4' }
+    case 'woff': case 'woff2': case 'ttf': case 'otf': return { label: 'F', color: '#888' }
+    case 'xml': return { label: '<>', color: '#f26522' }
+    default: return { label: '', color: '#888' }
   }
 }
 
@@ -103,7 +132,7 @@ watch(() => props.rootPath, loadRoot, { immediate: true })
 </script>
 
 <template>
-  <div class="file-tree">
+  <div class="file-tree" :class="{ 'light-theme': lightTheme }">
     <div class="file-tree-header">
       <span class="file-tree-title">EXPLORER</span>
       <button class="refresh-btn" @click="loadRoot" title="Refresh">⟳</button>
@@ -117,8 +146,23 @@ watch(() => props.rootPath, loadRoot, { immediate: true })
         :style="{ paddingLeft: node.depth * 16 + 8 + 'px' }"
         @click="handleClick(node)"
       >
-        <span class="tree-icon">{{ getFileIcon(node) }}</span>
-        <span class="tree-name">{{ node.name }}</span>
+        <template v-if="node.is_dir">
+          <span class="tree-chevron" :class="{ expanded: node.expanded }">›</span>
+          <span class="tree-name">{{ node.name }}</span>
+        </template>
+        <template v-else>
+          <span
+            v-if="getFileIcon(node)!.label"
+            class="tree-file-icon"
+            :style="{ color: getFileIcon(node)!.color }"
+          >{{ getFileIcon(node)!.label }}</span>
+          <span
+            v-else
+            class="tree-file-dot"
+            :style="{ color: getFileIcon(node)!.color }"
+          >●</span>
+          <span class="tree-name">{{ node.name }}</span>
+        </template>
         <span v-if="node.loading" class="tree-spinner">…</span>
       </div>
     </div>
@@ -187,9 +231,36 @@ watch(() => props.rootPath, loadRoot, { immediate: true })
   background: rgba(128, 128, 128, 0.15);
 }
 
-.tree-icon {
-  font-size: 14px;
+.tree-chevron {
+  font-size: 12px;
   flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  color: #888;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+.tree-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-file-icon {
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  line-height: 1;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.tree-file-dot {
+  font-size: 8px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  line-height: 1;
 }
 
 .tree-name {
@@ -200,5 +271,43 @@ watch(() => props.rootPath, loadRoot, { immediate: true })
 .tree-spinner {
   color: #888;
   margin-left: 4px;
+}
+
+/* Light theme */
+.file-tree.light-theme {
+  background: #f3f3f3;
+}
+
+.light-theme .file-tree-header {
+  color: #555;
+  border-bottom-color: #e0e0e0;
+}
+
+.light-theme .refresh-btn {
+  color: #666;
+}
+.light-theme .refresh-btn:hover {
+  color: #333;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.light-theme .file-tree-loading {
+  color: #666;
+}
+
+.light-theme .tree-item {
+  color: #333;
+}
+
+.light-theme .tree-item:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.light-theme .tree-spinner {
+  color: #666;
+}
+
+.light-theme .tree-chevron {
+  color: #666;
 }
 </style>

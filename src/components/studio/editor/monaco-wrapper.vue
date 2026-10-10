@@ -17,6 +17,7 @@ const props = defineProps<{
   modelValue: string
   language: string
   filePath: string
+  lightTheme?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -53,7 +54,7 @@ onMounted(() => {
 
   editor.value = monaco.editor.create(container.value, {
     model,
-    theme: 'vs-dark',
+    theme: props.lightTheme ? 'vs' : 'vs-dark',
     automaticLayout: true,
     minimap: { enabled: true },
     fontSize: 13,
@@ -85,6 +86,11 @@ watch(() => props.filePath, (newPath) => {
   if (!editor.value) return
   const model = getOrCreateModel(newPath, props.modelValue, props.language)
   editor.value.setModel(model)
+})
+
+// Switch Monaco theme when light/dark changes
+watch(() => props.lightTheme, (isLight) => {
+  monaco.editor.setTheme(isLight ? 'vs' : 'vs-dark')
 })
 
 // Update model content when modelValue changes externally (e.g. file reload)

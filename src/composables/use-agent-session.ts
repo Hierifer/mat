@@ -26,6 +26,12 @@ export interface AgentTimelineItem {
   timestamp: number
 }
 
+export interface AgentTodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm?: string
+}
+
 let itemCounter = 0
 function nextItemId(): string {
   return `agent_item_${Date.now()}_${itemCounter++}`
@@ -53,12 +59,20 @@ export function useAgentSession(roomId?: Ref<string | null>) {
   const exitCode = ref<number | null>(null)
   const readOnly = ref(false)
   const suggestedResponses = ref<string[]>([])  // Claude Code's suggested replies from result event
+  const currentTodos = ref<AgentTodoItem[]>([])
+  const retryMessage = ref<{ text: string } | null>(null)
+  // Per-turn metrics (reset when a new turn starts)
+  const turnInputTokens = ref(0)
+  const turnOutputTokens = ref(0)
+  const busySince = ref<number | null>(null)    // Date.now() when isBusy became true
 
   const unlisteners = shallowRef<UnlistenFn[]>([])
   // Map tool_use_id -> timeline item holding the tool card
   const toolItemsById = new Map<string, AgentTimelineItem>()
   // Remember cwd for auto-resume
   let lastCwd = ''
+  // Track the text currently being sent to the agent (for retry on error)
+  let currentSendingText = ''
 
   function persistMessage(item: AgentTimelineItem) {
     const rid = roomId?.value
@@ -132,12 +146,26 @@ export function useAgentSession(roomId?: Ref<string | null>) {
         break
       }
       case 'assistant': {
+        // Accumulate token usage from this API call
+        const usage = event.message?.usage
+        if (usage) {
+          if (typeof usage.input_tokens === 'number') turnInputTokens.value += usage.input_tokens
+          if (typeof usage.output_tokens === 'number') turnOutputTokens.value += usage.output_tokens
+        }
         const content = event.message?.content
         if (!Array.isArray(content)) break
         for (const block of content) {
           if (block.type === 'text' && block.text) {
             pushItem({ kind: 'assistant', text: block.text })
           } else if (block.type === 'tool_use') {
+            // Extract TodoWrite data before creating timeline item
+            if (block.name === 'TodoWrite' && Array.isArray(block.input?.todos)) {
+              currentTodos.value = block.input.todos.map((t: any) => ({
+                content: t.content || '',
+                status: t.status || 'pending',
+                activeForm: t.activeForm || '',
+              }))
+            }
             const item = pushItem({
               kind: 'tool',
               text: summarizeToolInput(block.input || {}),
@@ -182,6 +210,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
       }
       case 'result': {
         isBusy.value = false
+        busySince.value = null
         if (typeof event.total_cost_usd === 'number') {
           totalCostUsd.value = event.total_cost_usd
         }
@@ -190,6 +219,11 @@ export function useAgentSession(roomId?: Ref<string | null>) {
         }
         if (event.is_error) {
           pushItem({ kind: 'error', text: event.result || 'Task failed' })
+          if (!retryMessage.value && currentSendingText) {
+            retryMessage.value = { text: currentSendingText }
+          }
+        } else {
+          retryMessage.value = null
         }
         // Capture Claude Code's context-aware suggested replies
         if (Array.isArray(event.suggested_responses)) {
@@ -231,6 +265,14 @@ export function useAgentSession(roomId?: Ref<string | null>) {
         items.value.push(item)
         if (item.tool) {
           toolItemsById.set(item.tool.id, items.value[items.value.length - 1])
+          // Restore currentTodos from the last TodoWrite in history
+          if (item.tool.name === 'TodoWrite' && Array.isArray(item.tool.input?.todos)) {
+            currentTodos.value = (item.tool.input.todos as any[]).map((t: any) => ({
+              content: t.content || '',
+              status: t.status || 'pending',
+              activeForm: t.activeForm || '',
+            }))
+          }
         }
       }
     } catch (e) {
@@ -373,6 +415,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     exitCode,
     readOnly,
     suggestedResponses,
+    currentTodos,
     start,
     send,
     interrupt,

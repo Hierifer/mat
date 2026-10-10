@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import FileTree from './file-tree.vue'
 import EditorTabs from './editor-tabs.vue'
 import type { EditorTab } from './editor-tabs.vue'
 import MonacoWrapper from './monaco-wrapper.vue'
 import { detectLanguage } from '@/utils/editor-utils'
+import { useTerminalStore } from '@/stores/terminal-store'
+
+const store = useTerminalStore()
 
 const props = defineProps<{
   cwd: string
+  lightTheme?: boolean
 }>()
 
 interface OpenFile {
@@ -114,18 +118,27 @@ async function handleSave() {
     console.error('Failed to save file:', err)
   }
 }
+
+// Watch for external file open requests (e.g. from git panel)
+watch(() => store.pendingEditorFile, (filePath) => {
+  if (filePath) {
+    handleOpenFile(filePath)
+    store.pendingEditorFile = null
+  }
+})
 </script>
 
 <template>
-  <div class="editor-layout">
+  <div class="editor-layout" :class="{ 'light-theme': lightTheme }">
     <div class="file-tree-panel" :style="{ width: treeWidth + 'px' }">
-      <FileTree :root-path="cwd" @open-file="handleOpenFile" />
+      <FileTree :root-path="cwd" :light-theme="lightTheme" @open-file="handleOpenFile" />
     </div>
     <div class="resize-handle" @mousedown="startResize"></div>
     <div class="editor-panel">
       <EditorTabs
         :tabs="tabs"
         :active-index="activeFileIndex"
+        :light-theme="lightTheme"
         @select="handleSelectTab"
         @close="handleCloseTab"
       />
@@ -135,6 +148,7 @@ async function handleSave() {
           :model-value="activeFile.content"
           :language="activeFile.language"
           :file-path="activeFile.path"
+          :light-theme="lightTheme"
           @update:model-value="handleContentChange"
           @save="handleSave"
         />
@@ -191,5 +205,15 @@ async function handleSave() {
   color: #555;
   font-size: 14px;
   background: #1e1e1e;
+  transition: background 0.3s, color 0.3s;
+}
+
+.light-theme .resize-handle:hover {
+  background: #007acc;
+}
+
+.light-theme .editor-empty {
+  background: #f3f3f3;
+  color: #999;
 }
 </style>

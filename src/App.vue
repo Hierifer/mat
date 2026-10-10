@@ -594,7 +594,7 @@ onUnmounted(() => {
               </div>
 
               <div v-show="branch.status !== 'merged' && branch.viewMode === 'editor'" class="editor-view">
-                <editor-view :cwd="branch.worktreePath" />
+                <editor-view :cwd="branch.worktreePath" :light-theme="isLightTheme" />
               </div>
             </div>
           </template>

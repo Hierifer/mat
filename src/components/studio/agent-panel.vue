@@ -86,6 +86,17 @@ function isPlanPending(item: AgentTimelineItem): boolean {
   return isExitPlanMode(item) && item.tool?.result === null
 }
 
+// TodoWrite card helpers
+function isTodoWrite(item: AgentTimelineItem): boolean {
+  return item.kind === 'tool' && item.tool?.name === 'TodoWrite'
+}
+
+const todoCompletedCount = computed(() =>
+  agent.currentTodos.value.filter(t => t.status === 'completed').length
+)
+const todoTotalCount = computed(() => agent.currentTodos.value.length)
+const todoAllDone = computed(() => todoTotalCount.value > 0 && todoCompletedCount.value === todoTotalCount.value)
+
 // Track selected answers per AskUserQuestion item
 const askSelections = ref<Record<string, Record<number, Set<number>>>>({})  // itemId -> questionIdx -> selected option indices
 const askOtherTexts = ref<Record<string, Record<number, string>>>({})       // itemId -> questionIdx -> custom text
@@ -364,6 +375,8 @@ const blocks = computed<TimelineBlock[]>(() => {
   const out: TimelineBlock[] = []
   for (const item of agent.items.value) {
     if (item.kind === 'tool' && item.tool) {
+      // Filter out TodoWrite tool calls — they render as a dedicated card
+      if (isTodoWrite(item)) continue
       // AskUserQuestion should render as a standalone card, not inside the scrollable tool group
       if (item.tool.name === 'AskUserQuestion') {
         out.push({ type: 'item', item })
@@ -763,6 +776,35 @@ onUnmounted(() => {
           {{ block.item.text }}
         </div>
       </template>
+
+      <!-- TodoWrite task card -->
+      <div v-if="agent.currentTodos.value.length > 0" class="todo-card" :class="{ 'todo-done': todoAllDone }">
+        <div class="todo-header">
+          <span class="todo-title">Tasks</span>
+          <span class="todo-count">{{ todoCompletedCount }}/{{ todoTotalCount }}</span>
+          <div class="todo-progress-bar">
+            <div class="todo-progress-fill" :style="{ width: (todoCompletedCount / todoTotalCount * 100) + '%' }" />
+          </div>
+        </div>
+        <div class="todo-list">
+          <div
+            v-for="(todo, idx) in agent.currentTodos.value"
+            :key="idx"
+            class="todo-item"
+            :class="'todo-' + todo.status"
+          >
+            <span class="todo-icon">
+              <template v-if="todo.status === 'completed'">&#10003;</template>
+              <template v-else-if="todo.status === 'in_progress'"><span class="todo-spinner" /></template>
+              <template v-else>&#9675;</template>
+            </span>
+            <span class="todo-text">
+              <template v-if="todo.status === 'in_progress' && todo.activeForm">{{ todo.activeForm }}</template>
+              <template v-else>{{ todo.content }}</template>
+            </span>
+          </div>
+        </div>
+      </div>
 
       <div v-if="agent.isBusy.value" class="agent-thinking">
         <span class="thinking-dot" /><span class="thinking-dot" /><span class="thinking-dot" />
@@ -1893,6 +1935,151 @@ onUnmounted(() => {
   background: #e0e0e0;
   border-color: #007acc;
   color: #000;
+}
+
+/* TodoWrite task card */
+.todo-card {
+  background: #252526;
+  border: 1px solid #333;
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.3s, opacity 0.3s;
+}
+
+.todo-card.todo-done {
+  border-color: #4caf50;
+  opacity: 0.7;
+}
+
+.light-theme .todo-card {
+  background: #f0f0f0;
+  border-color: #ddd;
+}
+
+.light-theme .todo-card.todo-done {
+  border-color: #4caf50;
+}
+
+.todo-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #2d2d2d;
+}
+
+.light-theme .todo-header {
+  border-bottom-color: #e2e2e2;
+}
+
+.todo-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #d4d4d4;
+}
+
+.light-theme .todo-title {
+  color: #333;
+}
+
+.todo-count {
+  font-size: 11px;
+  color: #888;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+}
+
+.todo-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: #3c3c3c;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.light-theme .todo-progress-bar {
+  background: #ddd;
+}
+
+.todo-progress-fill {
+  height: 100%;
+  background: #4caf50;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.todo-list {
+  padding: 4px 0;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.todo-icon {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.todo-completed .todo-icon {
+  color: #4caf50;
+}
+
+.todo-pending .todo-icon {
+  color: #666;
+}
+
+.todo-in_progress .todo-icon {
+  color: #4fc1ff;
+}
+
+.todo-text {
+  color: #d4d4d4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.light-theme .todo-text {
+  color: #333;
+}
+
+.todo-completed .todo-text {
+  color: #888;
+  text-decoration: line-through;
+}
+
+.light-theme .todo-completed .todo-text {
+  color: #999;
+}
+
+.todo-in_progress .todo-text {
+  color: #4fc1ff;
+}
+
+.light-theme .todo-in_progress .todo-text {
+  color: #0066b8;
+}
+
+.todo-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #444;
+  border-top-color: #4fc1ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.light-theme .todo-spinner {
+  border-color: #ccc;
+  border-top-color: #0066b8;
 }
 
 </style>
