@@ -345,11 +345,16 @@ const blocks = computed<TimelineBlock[]>(() => {
   const out: TimelineBlock[] = []
   for (const item of agent.items.value) {
     if (item.kind === 'tool' && item.tool) {
-      const last = out[out.length - 1]
-      if (last && last.type === 'tools') {
-        last.items.push(item)
+      // AskUserQuestion should render as a standalone card, not inside the scrollable tool group
+      if (item.tool.name === 'AskUserQuestion') {
+        out.push({ type: 'item', item })
       } else {
-        out.push({ type: 'tools', id: `tools_${item.id}`, items: [item] })
+        const last = out[out.length - 1]
+        if (last && last.type === 'tools') {
+          last.items.push(item)
+        } else {
+          out.push({ type: 'tools', id: `tools_${item.id}`, items: [item] })
+        }
       }
     } else {
       out.push({ type: 'item', item })
@@ -497,10 +502,20 @@ async function sendQuickReply(text: string) {
 const suggestedReplies = computed(() => {
   if ((!agent.isRunning.value && !agent.canResume.value) || agent.isBusy.value || props.readOnly) return []
   if (agent.items.value.length === 0) return []
+  // Hide when AskUserQuestion is pending (the ask-card handles interaction)
+  if (hasPendingAsk()) return []
+
+  // Use Claude Code's context-aware suggested responses if available
+  if (agent.suggestedResponses.value.length > 0) {
+    return agent.suggestedResponses.value.map((text, i) => ({
+      key: `sr_${i}`,
+      label: text,
+    }))
+  }
+
+  // Fallback: minimal defaults
   return [
     { key: 'continue', label: t('studio.agent.suggestContinue', '继续') },
-    { key: 'lgtm', label: t('studio.agent.suggestLooksGood', 'LGTM, 继续') },
-    { key: 'undo', label: t('studio.agent.suggestUndo', '撤销上一步') },
     { key: 'explain', label: t('studio.agent.suggestExplain', '解释一下') },
   ]
 })
@@ -652,6 +667,60 @@ onUnmounted(() => {
         <div v-else-if="block.item.kind === 'assistant'" class="msg msg-assistant">
           <!-- eslint-disable-next-line vue/no-v-html -- markdown-it with html:false escapes raw HTML -->
           <div class="msg-assistant-md" v-html="renderMarkdown(block.item.text)" />
+        </div>
+
+        <!-- AskUserQuestion (standalone, outside tool-group scroll) -->
+        <div v-else-if="block.item.kind === 'tool' && isAskUserQuestion(block.item)" class="msg msg-tool">
+          <div class="ask-card">
+            <div v-for="(q, qIdx) in getAskQuestions(block.item)" :key="qIdx" class="ask-question">
+              <div v-if="q.header" class="ask-header">{{ q.header }}</div>
+              <div class="ask-question-text">{{ q.question }}</div>
+              <div class="ask-options">
+                <button
+                  v-for="(opt, oIdx) in q.options"
+                  :key="oIdx"
+                  class="ask-option-btn"
+                  :class="{ selected: isAskOptionSelected(block.item.id, qIdx, oIdx) }"
+                  :disabled="!isAskPending(block.item)"
+                  @click="toggleAskOption(block.item.id, qIdx, oIdx, !!q.multiSelect)"
+                >
+                  <span class="ask-check">{{ q.multiSelect ? (isAskOptionSelected(block.item.id, qIdx, oIdx) ? '☑' : '☐') : (isAskOptionSelected(block.item.id, qIdx, oIdx) ? '◉' : '○') }}</span>
+                  <span class="ask-option-content">
+                    <span class="ask-option-label">{{ opt.label }}</span>
+                    <span v-if="opt.description" class="ask-option-desc">{{ opt.description }}</span>
+                  </span>
+                </button>
+                <!-- Other (free input) -->
+                <button
+                  class="ask-option-btn"
+                  :class="{ selected: askUsingOther[block.item.id]?.[qIdx] }"
+                  :disabled="!isAskPending(block.item)"
+                  @click="toggleAskOther(block.item.id, qIdx, !!q.multiSelect)"
+                >
+                  <span class="ask-check">{{ q.multiSelect ? (askUsingOther[block.item.id]?.[qIdx] ? '☑' : '☐') : (askUsingOther[block.item.id]?.[qIdx] ? '◉' : '○') }}</span>
+                  <span class="ask-option-label">Other</span>
+                </button>
+                <input
+                  v-if="askUsingOther[block.item.id]?.[qIdx]"
+                  v-model="askOtherTexts[block.item.id][qIdx]"
+                  class="ask-other-input"
+                  placeholder="Type your answer..."
+                  :disabled="!isAskPending(block.item)"
+                  @keydown.enter.prevent="submitAskAnswer(block.item)"
+                />
+              </div>
+            </div>
+            <button
+              v-if="isAskPending(block.item)"
+              class="ask-submit-btn"
+              :disabled="!hasAskSelection(block.item.id, getAskQuestions(block.item))"
+              @click="submitAskAnswer(block.item)"
+            >Submit</button>
+            <div v-else-if="block.item.tool?.result" class="ask-answered">
+              <icon-font name="check" :size="11" />
+              <span>{{ block.item.tool.result }}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Error -->
@@ -1498,6 +1567,14 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: #252526;
+  border: 1px solid #333;
+  border-radius: 6px;
+}
+
+.light-theme .ask-card {
+  background: #f0f0f0;
+  border-color: #ddd;
 }
 
 .ask-question {
