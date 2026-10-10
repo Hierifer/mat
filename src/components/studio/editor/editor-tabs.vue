@@ -8,6 +8,7 @@ export interface EditorTab {
 defineProps<{
   tabs: EditorTab[]
   activeIndex: number
+  lightTheme?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,7 +23,7 @@ function handleClose(e: MouseEvent, index: number) {
 </script>
 
 <template>
-  <div class="editor-tabs" v-if="tabs.length > 0">
+  <div class="editor-tabs" v-if="tabs.length > 0" :class="{ 'light-theme': lightTheme }">
     <div
       v-for="(tab, i) in tabs"
       :key="tab.path"
@@ -100,5 +101,39 @@ function handleClose(e: MouseEvent, index: number) {
 .tab-close:hover {
   background: rgba(128, 128, 128, 0.3);
   color: #fff;
+}
+
+/* Light theme */
+.editor-tabs.light-theme {
+  background: #f3f3f3;
+  border-bottom-color: #e0e0e0;
+}
+
+.light-theme .editor-tab {
+  color: #666;
+  border-right-color: #e0e0e0;
+}
+
+.light-theme .editor-tab:hover {
+  color: #333;
+}
+
+.light-theme .editor-tab.active {
+  background: #ffffff;
+  color: #333;
+  border-bottom-color: #007acc;
+}
+
+.light-theme .tab-modified {
+  color: #333;
+}
+
+.light-theme .tab-close {
+  color: #666;
+}
+
+.light-theme .tab-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #333;
 }
 </style>
