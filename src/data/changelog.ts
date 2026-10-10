@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 }
 
 export const changelog: Record<string, ChangelogEntry> = {
+  '1.7.5': {
+    date: '2026-10-11',
+    features: [
+      'agent lazy start, process group isolation, divider styling, /resume /login commands',
+    ],
+    fixes: [],
+  },
   '1.7.4': {
     date: '2026-10-10',
     features: [
@@ -89,15 +96,6 @@ export const changelog: Record<string, ChangelogEntry> = {
     features: [],
     fixes: [
       'studio branch creation reuses existing branches/worktrees; theme-aware studio content background',
-    ],
-  },
-  '1.5.1': {
-    date: '2026-07-17',
-    features: [
-      'Chrome-style tab bar — active tab matches content color, inactive blends into bar',
-    ],
-    fixes: [
-      'shifted symbol keys (e.g. Shift+9) swallowed by WebKit IME composition in terminal',
     ],
   },
 }

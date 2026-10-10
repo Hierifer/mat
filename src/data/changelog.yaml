@@ -1,6 +1,12 @@
 # Auto-generated from git history. Do not edit manually.
 # Regenerate: node scripts/generate-changelog.mjs
 
+- version: "1.7.5"
+  date: "2026-10-11"
+  features:
+    - "agent lazy start, process group isolation, divider styling, /resume /login commands"
+  fixes: []
+
 - version: "1.7.4"
   date: "2026-10-10"
   features:
@@ -70,10 +76,3 @@
   features: []
   fixes:
     - studio branch creation reuses existing branches/worktrees; theme-aware studio content background
-
-- version: "1.5.1"
-  date: "2026-07-17"
-  features:
-    - "Chrome-style tab bar — active tab matches content color, inactive blends into bar"
-  fixes:
-    - shifted symbol keys (e.g. Shift+9) swallowed by WebKit IME composition in terminal
