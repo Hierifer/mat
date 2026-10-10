@@ -67,6 +67,25 @@ function isAskPending(item: AgentTimelineItem): boolean {
   return isAskUserQuestion(item) && item.tool?.result === null
 }
 
+// ExitPlanMode: render plan content as a markdown card
+function isExitPlanMode(item: AgentTimelineItem): boolean {
+  return item.kind === 'tool' && item.tool?.name === 'ExitPlanMode'
+}
+
+function getPlanContent(item: AgentTimelineItem): string {
+  if (!isExitPlanMode(item)) return ''
+  const input = item.tool?.input
+  if (!input) return ''
+  // The plan field contains the markdown content written to the plan file
+  if (typeof input.plan === 'string') return input.plan
+  // Fallback: try to extract from allowedPrompts or other fields
+  return ''
+}
+
+function isPlanPending(item: AgentTimelineItem): boolean {
+  return isExitPlanMode(item) && item.tool?.result === null
+}
+
 // Track selected answers per AskUserQuestion item
 const askSelections = ref<Record<string, Record<number, Set<number>>>>({})  // itemId -> questionIdx -> selected option indices
 const askOtherTexts = ref<Record<string, Record<number, string>>>({})       // itemId -> questionIdx -> custom text
@@ -617,6 +636,22 @@ onUnmounted(() => {
                   <div v-else-if="item.tool?.result" class="ask-answered">
                     <icon-font name="check" :size="11" />
                     <span>{{ item.tool.result }}</span>
+                  </div>
+                </div>
+
+                <!-- ExitPlanMode: render plan as markdown card -->
+                <div v-else-if="isExitPlanMode(item)" class="plan-card">
+                  <div class="plan-card-header">
+                    <icon-font name="fold" :size="10" />
+                    <span class="plan-card-title">Plan</span>
+                    <span v-if="isPlanPending(item)" class="tool-spinner" />
+                    <span v-else-if="item.tool?.isError" class="tool-badge tool-badge-error"><icon-font name="error" :size="11" /></span>
+                    <span v-else class="tool-badge tool-badge-ok"><icon-font name="check" :size="11" /></span>
+                  </div>
+                  <!-- eslint-disable-next-line vue/no-v-html -- markdown-it with html:false escapes raw HTML -->
+                  <div v-if="getPlanContent(item)" class="plan-card-body msg-assistant-md" v-html="renderMarkdown(getPlanContent(item))" />
+                  <div v-if="item.tool?.result && !item.tool.isError" class="plan-card-footer">
+                    {{ item.tool.result }}
                   </div>
                 </div>
 
@@ -1490,6 +1525,51 @@ onUnmounted(() => {
 
 .light-theme .msg-attachment-name {
   color: #777;
+}
+
+/* ExitPlanMode plan card */
+.plan-card {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.plan-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #c586c0;
+}
+
+.light-theme .plan-card-header {
+  color: #8b3e8b;
+}
+
+.plan-card-title {
+  font-weight: 600;
+  flex: 1;
+}
+
+.plan-card-body {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.light-theme .plan-card-body {
+  background: #fafafa;
+  border-color: #ddd;
+}
+
+.plan-card-footer {
+  font-size: 11px;
+  color: #888;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
 }
 
 /* AskUserQuestion card */
