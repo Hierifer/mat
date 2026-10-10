@@ -26,6 +26,12 @@ export interface AgentTimelineItem {
   timestamp: number
 }
 
+export interface AgentTodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm?: string
+}
+
 let itemCounter = 0
 function nextItemId(): string {
   return `agent_item_${Date.now()}_${itemCounter++}`
@@ -52,6 +58,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
   const lastDurationMs = ref(0)
   const exitCode = ref<number | null>(null)
   const readOnly = ref(false)
+  const currentTodos = ref<AgentTodoItem[]>([])
 
   const unlisteners = shallowRef<UnlistenFn[]>([])
   // Map tool_use_id -> timeline item holding the tool card
@@ -137,6 +144,14 @@ export function useAgentSession(roomId?: Ref<string | null>) {
           if (block.type === 'text' && block.text) {
             pushItem({ kind: 'assistant', text: block.text })
           } else if (block.type === 'tool_use') {
+            // Extract TodoWrite data before creating timeline item
+            if (block.name === 'TodoWrite' && Array.isArray(block.input?.todos)) {
+              currentTodos.value = block.input.todos.map((t: any) => ({
+                content: t.content || '',
+                status: t.status || 'pending',
+                activeForm: t.activeForm || '',
+              }))
+            }
             const item = pushItem({
               kind: 'tool',
               text: summarizeToolInput(block.input || {}),
@@ -222,6 +237,14 @@ export function useAgentSession(roomId?: Ref<string | null>) {
         items.value.push(item)
         if (item.tool) {
           toolItemsById.set(item.tool.id, items.value[items.value.length - 1])
+          // Restore currentTodos from the last TodoWrite in history
+          if (item.tool.name === 'TodoWrite' && Array.isArray(item.tool.input?.todos)) {
+            currentTodos.value = (item.tool.input.todos as any[]).map((t: any) => ({
+              content: t.content || '',
+              status: t.status || 'pending',
+              activeForm: t.activeForm || '',
+            }))
+          }
         }
       }
     } catch (e) {
@@ -362,6 +385,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     lastDurationMs,
     exitCode,
     readOnly,
+    currentTodos,
     start,
     send,
     interrupt,
