@@ -50,6 +50,10 @@ lazy_static = "1.4"
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 futures-util = "0.3"
 
+# Unix process group management
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Platform-specific dependencies
 [target.'cfg(target_os = "macos")'.dependencies]
 # Speech recognition with Whisper

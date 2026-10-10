@@ -17,10 +17,10 @@ pub async fn agent_spawn(
     cwd: String,
     resume_session_id: Option<String>,
 ) -> Result<AgentSpawnResponse, String> {
-    let agent_id = manager
-        .lock()
-        .await
-        .spawn(cwd, app_handle.clone(), resume_session_id)?;
+    let agent_id = {
+        let mut mgr = manager.lock().await;
+        mgr.spawn(cwd, app_handle.clone(), resume_session_id)?
+    };
 
     // Watch for process exit and notify frontend
     {

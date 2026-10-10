@@ -180,4 +180,22 @@ Git 操作通过 Rust 后端（`src-tauri/src/git.rs`）执行，使用 git2 库
 | `src/components/studio/agent-panel.vue` | Claude Code AI 界面 |
 | `src/composables/use-agent-session.ts` | Agent 会话逻辑（spawn / send / stream） |
 | `src-tauri/src/git.rs` | Rust 端 Git 操作 |
+| `src-tauri/src/agent/manager.rs` | Agent 进程管理（spawn / kill / send） |
+| `src-tauri/src/agent/commands.rs` | Agent Tauri 命令入口 |
 | `src/i18n/locales/en.ts` | Studio 国际化文本 (`studio.*`) |
+
+---
+
+## Agent 进程管理
+
+### 懒启动 (Lazy Start)
+
+Agent 进程不在组件挂载时启动，而是在用户首次发送消息时按需 spawn。`agent-panel.vue` 的 `onMounted` 只调用 `setCwd()` 设置工作目录和加载历史记录。
+
+### 进程清理
+
+每个 agent session 可独立存在（多分支各自保持 agent）。进程终止时使用 `libc::kill` 发送 SIGTERM（进程组）+ SIGKILL（单进程），确保子 claude 进程也被清理。spawn 时通过 `.process_group(0)` 为子进程创建独立进程组，避免 kill 信号波及 Tauri 主进程。
+
+### 自动恢复 (Auto-Resume)
+
+当进程退出后用户再次发消息，`use-agent-session.ts` 的 `send()` 检测到 `!isRunning && lastCwd` 时会自动重新 spawn 进程，并通过 `--resume <session_id>` 恢复 Claude Code 会话上下文。

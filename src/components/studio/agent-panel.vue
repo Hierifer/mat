@@ -345,7 +345,7 @@ watch(
 )
 
 const headerStatusClass = computed(() => {
-  if (agent.exitCode.value !== null || !agent.isRunning.value) {
+  if (!agent.isRunning.value) {
     return 'done'
   }
   if (agent.isBusy.value) {
@@ -355,7 +355,7 @@ const headerStatusClass = computed(() => {
 })
 
 const statusText = computed(() => {
-  if (agent.exitCode.value !== null) return t('studio.agent.sessionExited')
+  if (agent.exitCode.value !== null && !agent.canResume.value) return t('studio.agent.sessionExited')
   if (!agent.isRunning.value) return ''
   if (agent.isBusy.value) return t('studio.agent.thinking')
   return t('studio.agent.ready')
@@ -464,6 +464,7 @@ async function handleSend() {
     name: f.name,
     previewUrl: f.previewUrl,
   }))
+  console.log('[Agent] handleSend:', { text, isRunning: agent.isRunning.value, canResume: agent.canResume.value, readOnly: agent.readOnly.value })
   if ((!text && attachments.length === 0) || (!agent.isRunning.value && !agent.canResume.value)) return
   inputText.value = ''
   // Don't revoke preview URLs — they're kept for display in sent message bubbles
@@ -601,13 +602,14 @@ onMounted(async () => {
     return
   }
 
-  // Load history first, then start agent
+  // Set cwd for lazy start, load history only — agent process is spawned on first user message
+  agent.setCwd(props.cwd)
+  if (props.resumeSessionId) {
+    agent.claudeSessionId.value = props.resumeSessionId
+  }
   if (props.roomId) {
     await agent.loadHistory(props.roomId)
   }
-  agent.start(props.cwd, props.resumeSessionId || undefined).catch((error) => {
-    console.error('[Agent] Failed to start:', error)
-  })
 })
 
 onUnmounted(() => {

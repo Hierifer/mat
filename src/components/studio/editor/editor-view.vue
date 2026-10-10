@@ -176,11 +176,11 @@ watch(() => store.pendingEditorFile, (filePath) => {
 .resize-handle {
   width: 3px;
   cursor: col-resize;
-  background: transparent;
+  background: #888;
   flex-shrink: 0;
 }
 .resize-handle:hover {
-  background: #0e639c;
+  background: #aaa;
 }
 
 .editor-panel {

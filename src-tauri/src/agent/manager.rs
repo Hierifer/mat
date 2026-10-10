@@ -6,6 +6,9 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use uuid::Uuid;
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
 #[derive(serde::Deserialize, Clone)]
 pub struct AgentAttachment {
     pub path: String,
@@ -51,15 +54,19 @@ impl AgentManager {
             claude_cmd.push_str(&format!(" --resume {}", sid));
         }
 
-        let mut child = Command::new(&shell)
-            .args(["-lc", &claude_cmd])
+        let mut cmd = Command::new(&shell);
+        cmd.args(["-lc", &claude_cmd])
             .current_dir(&cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
+            .kill_on_drop(true);
+        // Give the child its own process group so kill(-pid) won't kill the parent app
+        #[cfg(unix)]
+        cmd.process_group(0);
+        let mut child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn agent: {}", e))?;
+        println!("[Agent] process spawned, pid={:?}", child.id());
 
         let stdin = child
             .stdin
@@ -196,10 +203,23 @@ impl AgentManager {
     }
 
     /// Kill an agent process and remove it.
-    pub async fn kill(&mut self, agent_id: &str) -> Result<(), String> {
-        if let Some(mut session) = self.sessions.remove(agent_id) {
-            let _ = session.child.kill().await;
+    pub fn kill_sync(&mut self, agent_id: &str) {
+        if let Some(session) = self.sessions.remove(agent_id) {
+            // Kill the entire process group so child claude processes are also terminated
+            #[cfg(unix)]
+            if let Some(pid) = session.child.id() {
+                unsafe {
+                    libc::kill(-(pid as i32), libc::SIGTERM);
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
+            }
+            // child is dropped here, kill_on_drop will clean up
         }
+    }
+
+    /// Async wrapper for tauri command compatibility.
+    pub async fn kill(&mut self, agent_id: &str) -> Result<(), String> {
+        self.kill_sync(agent_id);
         Ok(())
     }
 

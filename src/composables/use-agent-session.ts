@@ -53,7 +53,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
   const isInitialized = ref(false) // received system/init from Claude Code
   const model = ref('')
   const tools = ref<string[]>([])
-  const slashCommands = ref<string[]>([])
+  const slashCommands = ref<string[]>(['resume', 'login'])
   const totalCostUsd = ref(0)
   const lastDurationMs = ref(0)
   const exitCode = ref<number | null>(null)
@@ -69,8 +69,8 @@ export function useAgentSession(roomId?: Ref<string | null>) {
   const unlisteners = shallowRef<UnlistenFn[]>([])
   // Map tool_use_id -> timeline item holding the tool card
   const toolItemsById = new Map<string, AgentTimelineItem>()
-  // Remember cwd for auto-resume
-  let lastCwd = ''
+  // Remember cwd for auto-resume (ref so canResume computed can track it)
+  const lastCwd = ref('')
   // Track the text currently being sent to the agent (for retry on error)
   let currentSendingText = ''
 
@@ -129,7 +129,9 @@ export function useAgentSession(roomId?: Ref<string | null>) {
             tools.value = event.tools.filter((t: unknown) => typeof t === 'string')
           }
           if (Array.isArray(event.slash_commands)) {
-            slashCommands.value = event.slash_commands.filter((c: unknown) => typeof c === 'string')
+            const remote = event.slash_commands.filter((c: unknown) => typeof c === 'string') as string[]
+            const builtIn = ['resume', 'login']
+            slashCommands.value = [...new Set([...builtIn, ...remote])]
           }
           // Capture Claude Code's session ID for future --resume
           if (event.session_id) {
@@ -282,12 +284,13 @@ export function useAgentSession(roomId?: Ref<string | null>) {
   }
 
   async function start(cwd: string, resumeSessionId?: string) {
+    console.log('[Agent] start() called, agentId=', agentId.value, 'tauri=', !!(window as any).__TAURI_INTERNALS__)
     if (agentId.value) return
 
     // @ts-ignore
     if (!window.__TAURI_INTERNALS__) return
 
-    lastCwd = cwd
+    lastCwd.value = cwd
 
     // Don't clear items — loadHistory may have already populated them
     toolItemsById.clear()
@@ -295,10 +298,12 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     totalCostUsd.value = 0
     model.value = ''
 
+    console.log('[Agent] calling invoke agent_spawn, cwd=', cwd)
     const response = await invoke<{ agent_id: string }>('agent_spawn', {
       cwd,
       resumeSessionId: resumeSessionId || null,
     })
+    console.log('[Agent] agent_spawn returned:', response)
     const id = response.agent_id
     agentId.value = id
     isRunning.value = true
@@ -326,23 +331,30 @@ export function useAgentSession(roomId?: Ref<string | null>) {
 
     currentSendingText = trimmed
 
-    // Auto-resume: if the process died but we have a claudeSessionId, respawn with --resume
-    if (!isRunning.value && claudeSessionId.value && lastCwd) {
+    // Lazy start or auto-resume: spawn the agent process on demand
+    if (!isRunning.value && lastCwd.value) {
+      const resumeId = claudeSessionId.value || undefined
       pushItem({ kind: 'user', text: trimmed, attachments: attachments?.map((a) => ({ name: a.name, path: a.path, previewUrl: a.previewUrl })) })
-      pushItem({ kind: 'system', text: 'Resuming session…' })
+      if (resumeId) {
+        pushItem({ kind: 'system', text: 'Resuming session…' })
+      }
       isBusy.value = true
       busySince.value = Date.now()
       turnInputTokens.value = 0
       turnOutputTokens.value = 0
       try {
         await stop()
-        await start(lastCwd, claudeSessionId.value)
+        console.log('[Agent] lazy start: spawning process, cwd=', lastCwd.value, 'resumeId=', resumeId)
+        await start(lastCwd.value, resumeId)
+        console.log('[Agent] lazy start: process spawned, agentId=', agentId.value, 'isRunning=', isRunning.value)
         await invoke('agent_send', {
           agentId: agentId.value,
           text: trimmed,
           attachments: attachments?.map((a) => ({ path: a.path, media_type: a.mediaType })) ?? [],
         })
+        console.log('[Agent] lazy start: message sent')
       } catch (error) {
+        console.error('[Agent] lazy start error:', error)
         isBusy.value = false
         busySince.value = null
         pushItem({ kind: 'error', text: String(error) })
@@ -374,9 +386,15 @@ export function useAgentSession(roomId?: Ref<string | null>) {
         attachments: attachments?.map((a) => ({ path: a.path, media_type: a.mediaType })) ?? [],
       })
     } catch (error) {
+      const errStr = String(error)
+      // Session was killed (e.g. switched branches) — reset so next send lazy-starts
+      if (errStr.includes('Agent not found')) {
+        agentId.value = null
+        isRunning.value = false
+      }
       isBusy.value = false
       busySince.value = null
-      pushItem({ kind: 'error', text: String(error) })
+      pushItem({ kind: 'error', text: errStr })
       if (!retryMessage.value) {
         retryMessage.value = { text: trimmed }
       }
@@ -419,7 +437,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
 
   async function retry() {
     const msg = retryMessage.value
-    if (!msg || !lastCwd) return
+    if (!msg || !lastCwd.value) return
     retryMessage.value = null
     pushItem({ kind: 'system', text: 'Retrying…' })
     isBusy.value = true
@@ -429,7 +447,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     currentSendingText = msg.text
     try {
       await stop()
-      await start(lastCwd, claudeSessionId.value || undefined)
+      await start(lastCwd.value, claudeSessionId.value || undefined)
       await invoke('agent_send', {
         agentId: agentId.value,
         text: msg.text,
@@ -443,8 +461,13 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     }
   }
 
-  /** True when the process is dead but can be resumed via --resume */
-  const canResume = computed(() => !isRunning.value && !!claudeSessionId.value && !!lastCwd)
+  /** Set the working directory without starting the process (for lazy start). */
+  function setCwd(cwd: string) {
+    lastCwd.value = cwd
+  }
+
+  /** True when the process is not running but can be (re)started — either fresh or via --resume */
+  const canResume = computed(() => !isRunning.value && !!lastCwd.value)
 
   return {
     agentId,
@@ -464,6 +487,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     currentTodos,
     retryMessage,
     start,
+    setCwd,
     send,
     interrupt,
     stop,

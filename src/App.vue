@@ -689,8 +689,8 @@ onUnmounted(() => {
 }
 
 .sidebar-divider {
-  width: 4px;
-  background: #2d2d2d;
+  width: 1px;
+  background: #aaa;
   cursor: col-resize;
   flex-shrink: 0;
   transition: background 0.15s;

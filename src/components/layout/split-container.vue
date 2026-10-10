@@ -165,7 +165,7 @@ const gridStyle = computed(() => {
 }
 
 .divider {
-  background: #2d2d2d;
+  background: #888;
   transition: background 0.15s ease;
   flex-shrink: 0;
 }
