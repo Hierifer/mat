@@ -11,6 +11,7 @@ export const changelog: Record<string, ChangelogEntry> = {
   '1.7.3': {
     date: '2026-10-10',
     features: [
+      'add draggable sidebar divider in Studio mode',
       'remove merge functionality (worktree does not support merge)',
       'add file browser + Monaco editor tab to Studio mode',
       'auto-resume agent session when process dies',
