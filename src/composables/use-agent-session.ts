@@ -219,6 +219,7 @@ export function useAgentSession(roomId?: Ref<string | null>) {
         }
         if (event.is_error) {
           pushItem({ kind: 'error', text: event.result || 'Task failed' })
+          // Save the first failed message for retry (don't overwrite if already set)
           if (!retryMessage.value && currentSendingText) {
             retryMessage.value = { text: currentSendingText }
           }
@@ -323,11 +324,16 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     const hasAttachments = attachments && attachments.length > 0
     if (!trimmed && !hasAttachments) return
 
+    currentSendingText = trimmed
+
     // Auto-resume: if the process died but we have a claudeSessionId, respawn with --resume
     if (!isRunning.value && claudeSessionId.value && lastCwd) {
       pushItem({ kind: 'user', text: trimmed, attachments: attachments?.map((a) => ({ name: a.name, path: a.path, previewUrl: a.previewUrl })) })
       pushItem({ kind: 'system', text: 'Resuming session…' })
       isBusy.value = true
+      busySince.value = Date.now()
+      turnInputTokens.value = 0
+      turnOutputTokens.value = 0
       try {
         await stop()
         await start(lastCwd, claudeSessionId.value)
@@ -338,7 +344,11 @@ export function useAgentSession(roomId?: Ref<string | null>) {
         })
       } catch (error) {
         isBusy.value = false
+        busySince.value = null
         pushItem({ kind: 'error', text: String(error) })
+        if (!retryMessage.value) {
+          retryMessage.value = { text: trimmed }
+        }
       }
       return
     }
@@ -351,7 +361,12 @@ export function useAgentSession(roomId?: Ref<string | null>) {
       text: trimmed,
       attachments: attachments?.map((a) => ({ name: a.name, path: a.path, previewUrl: a.previewUrl })),
     })
-    if (!isBusy.value) isBusy.value = true
+    if (!isBusy.value) {
+      isBusy.value = true
+      busySince.value = Date.now()
+      turnInputTokens.value = 0
+      turnOutputTokens.value = 0
+    }
     try {
       await invoke('agent_send', {
         agentId: agentId.value,
@@ -360,7 +375,11 @@ export function useAgentSession(roomId?: Ref<string | null>) {
       })
     } catch (error) {
       isBusy.value = false
+      busySince.value = null
       pushItem({ kind: 'error', text: String(error) })
+      if (!retryMessage.value) {
+        retryMessage.value = { text: trimmed }
+      }
     }
   }
 
@@ -394,7 +413,34 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     await stop()
     items.value = []
     toolItemsById.clear()
+    retryMessage.value = null
     await start(cwd)
+  }
+
+  async function retry() {
+    const msg = retryMessage.value
+    if (!msg || !lastCwd) return
+    retryMessage.value = null
+    pushItem({ kind: 'system', text: 'Retrying…' })
+    isBusy.value = true
+    busySince.value = Date.now()
+    turnInputTokens.value = 0
+    turnOutputTokens.value = 0
+    currentSendingText = msg.text
+    try {
+      await stop()
+      await start(lastCwd, claudeSessionId.value || undefined)
+      await invoke('agent_send', {
+        agentId: agentId.value,
+        text: msg.text,
+        attachments: [],
+      })
+    } catch (error) {
+      isBusy.value = false
+      busySince.value = null
+      pushItem({ kind: 'error', text: String(error) })
+      retryMessage.value = msg
+    }
   }
 
   /** True when the process is dead but can be resumed via --resume */
@@ -416,11 +462,13 @@ export function useAgentSession(roomId?: Ref<string | null>) {
     readOnly,
     suggestedResponses,
     currentTodos,
+    retryMessage,
     start,
     send,
     interrupt,
     stop,
     restart,
+    retry,
     loadHistory,
   }
 }

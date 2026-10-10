@@ -556,6 +556,42 @@ async function handleRestart() {
   await agent.restart(props.cwd)
 }
 
+async function handleRetry() {
+  await agent.retry()
+}
+
+// Elapsed timer: ticks every second while agent is busy
+const elapsedNow = ref(Date.now())
+let elapsedTimer: ReturnType<typeof setInterval> | null = null
+
+watch(agent.isBusy, (busy) => {
+  if (busy) {
+    elapsedNow.value = Date.now()
+    elapsedTimer = setInterval(() => { elapsedNow.value = Date.now() }, 1000)
+  } else {
+    if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null }
+  }
+}, { immediate: true })
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000)
+  if (totalSec < 60) return `${totalSec}s`
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return `${m}m ${s}s`
+}
+
+const thinkingMeta = computed(() => {
+  const since = agent.busySince.value
+  if (!since) return ''
+  const parts: string[] = []
+  const elapsed = elapsedNow.value - since
+  if (elapsed >= 1000) parts.push(formatElapsed(elapsed))
+  const tokens = agent.turnInputTokens.value + agent.turnOutputTokens.value
+  if (tokens > 0) parts.push(`${tokens.toLocaleString()} tokens`)
+  return parts.length > 0 ? `(${parts.join(' · ')})` : ''
+})
+
 onMounted(async () => {
   if (props.readOnly) {
     agent.readOnly.value = true
@@ -575,6 +611,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null }
   agent.stop()
 })
 </script>
@@ -592,9 +629,6 @@ onUnmounted(() => {
       <div class="agent-header-right">
         <span v-if="costText" class="agent-cost">{{ costText }}</span>
         <span v-if="statusText" class="agent-status">{{ statusText }}</span>
-        <button v-if="!props.readOnly && agent.isBusy.value" class="agent-interrupt-btn" :title="t('studio.agent.interrupt', '中断')" @click="handleInterrupt">
-          <icon-font name="stop" :size="12" />
-        </button>
         <button v-if="!props.readOnly" class="agent-restart-btn" :title="t('studio.agent.restart')" @click="handleRestart">
           <icon-font name="refresh" :size="12" />
         </button>
@@ -808,6 +842,14 @@ onUnmounted(() => {
 
       <div v-if="agent.isBusy.value" class="agent-thinking">
         <span class="thinking-dot" /><span class="thinking-dot" /><span class="thinking-dot" />
+        <span v-if="thinkingMeta" class="thinking-meta">{{ thinkingMeta }}</span>
+      </div>
+
+      <div v-if="!agent.isRunning.value && !agent.isBusy.value && agent.retryMessage.value" class="agent-retry">
+        <button class="retry-btn" @click="handleRetry">
+          <icon-font name="refresh" :size="11" />
+          {{ t('studio.agent.retry', '重试') }}
+        </button>
       </div>
     </div>
 
@@ -877,6 +919,9 @@ onUnmounted(() => {
           @compositionend="handleCompositionEnd"
           @paste="handlePaste"
         />
+        <button v-if="!props.readOnly && agent.isBusy.value" class="agent-interrupt-btn" :title="t('studio.agent.interrupt', '中断')" @click="handleInterrupt">
+          <icon-font name="stop" :size="14" />
+        </button>
       </div>
     </div>
   </div>
@@ -1425,6 +1470,17 @@ onUnmounted(() => {
   50% { opacity: 1; transform: translateY(-2px); }
 }
 
+.thinking-meta {
+  font-size: 11px;
+  color: #666;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  margin-left: 4px;
+}
+
+.light-theme .thinking-meta {
+  color: #999;
+}
+
 /* Input */
 .agent-input-area {
   position: relative;
@@ -1868,35 +1924,38 @@ onUnmounted(() => {
   padding: 4px 0;
 }
 
-/* Interrupt button */
+/* Interrupt button (inside input row) */
 .agent-interrupt-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: rgba(244, 135, 113, 0.15);
-  border: 1px solid rgba(244, 135, 113, 0.4);
-  border-radius: 3px;
+  width: 32px;
+  height: 32px;
+  background: rgba(244, 135, 113, 0.12);
+  border: 2px solid rgba(244, 135, 113, 0.5);
+  border-radius: 6px;
   color: #f48771;
   cursor: pointer;
   padding: 0;
+  flex-shrink: 0;
   transition: all 0.15s;
 }
 
 .agent-interrupt-btn:hover {
-  background: rgba(244, 135, 113, 0.3);
+  background: rgba(244, 135, 113, 0.25);
+  border-color: rgba(244, 135, 113, 0.7);
   color: #ff6b56;
 }
 
 .light-theme .agent-interrupt-btn {
-  background: rgba(220, 50, 30, 0.08);
-  border-color: rgba(220, 50, 30, 0.3);
+  background: rgba(220, 50, 30, 0.06);
+  border-color: rgba(220, 50, 30, 0.35);
   color: #d32f2f;
 }
 
 .light-theme .agent-interrupt-btn:hover {
-  background: rgba(220, 50, 30, 0.15);
+  background: rgba(220, 50, 30, 0.12);
+  border-color: rgba(220, 50, 30, 0.5);
 }
 
 /* Suggested quick replies */
@@ -2080,6 +2139,43 @@ onUnmounted(() => {
 .light-theme .todo-spinner {
   border-color: #ccc;
   border-top-color: #0066b8;
+}
+
+/* Retry button */
+.agent-retry {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.retry-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(232, 171, 106, 0.12);
+  border: 1px solid rgba(232, 171, 106, 0.3);
+  border-radius: 16px;
+  color: #e8ab6a;
+  font-size: 12px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.retry-btn:hover {
+  background: rgba(232, 171, 106, 0.22);
+  border-color: rgba(232, 171, 106, 0.5);
+}
+
+.light-theme .retry-btn {
+  background: rgba(181, 101, 29, 0.08);
+  border-color: rgba(181, 101, 29, 0.25);
+  color: #b5651d;
+}
+
+.light-theme .retry-btn:hover {
+  background: rgba(181, 101, 29, 0.15);
+  border-color: rgba(181, 101, 29, 0.4);
 }
 
 </style>
