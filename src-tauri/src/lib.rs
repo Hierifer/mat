@@ -299,8 +299,16 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, event| {
+        .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
+                // Kill all agent processes on app exit
+                if let Some(agent_mgr) = app_handle.try_state::<Arc<Mutex<AgentManager>>>() {
+                    if let Ok(mut mgr) = agent_mgr.try_lock() {
+                        println!("[Agent] Killing all agent sessions on app exit...");
+                        mgr.kill_all_sync();
+                    }
+                }
+
                 // Release microphone on app exit
                 #[cfg(any(target_os = "macos", target_os = "linux"))]
                 {

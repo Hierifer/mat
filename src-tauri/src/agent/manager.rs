@@ -223,6 +223,14 @@ impl AgentManager {
         Ok(())
     }
 
+    /// Kill all agent sessions (used on app exit).
+    pub fn kill_all_sync(&mut self) {
+        let ids: Vec<String> = self.sessions.keys().cloned().collect();
+        for id in ids {
+            self.kill_sync(&id);
+        }
+    }
+
     /// Non-blocking exit check. Returns Ok(Some(code)) once the process has exited,
     /// Ok(None) while still running, Err if the session no longer exists.
     pub fn try_wait(&mut self, agent_id: &str) -> Result<Option<i32>, String> {
